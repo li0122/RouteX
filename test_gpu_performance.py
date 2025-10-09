@@ -130,11 +130,53 @@ def gpu_negative_sampling_test(user_count=10000, poi_count=50000, device=None, b
     
     return elapsed_time, len(negative_samples)
 
+def simple_gpu_test(user_count=1000, poi_count=5000):
+    """簡單的GPU測試，用於排除問題"""
+    print(f"\n簡單 GPU 測試: {user_count} 用戶 x {poi_count} POI")
+    
+    if not torch.cuda.is_available():
+        print("GPU 不可用")
+        return False
+    
+    try:
+        device = torch.device('cuda')
+        print(f"  使用設備: {device}")
+        
+        # 創建簡單張量
+        print("  步驟1: 創建測試張量...")
+        a = torch.randn(user_count, poi_count, device=device)
+        
+        print("  步驟2: 執行矩陣運算...")
+        b = torch.matmul(a, a.T)
+        
+        print("  步驟3: 布爾運算...")
+        mask = a > 0
+        result = torch.sum(mask, dim=1)
+        
+        print("  步驟4: 清理記憶體...")
+        del a, b, mask, result
+        torch.cuda.empty_cache()
+        
+        print("  ✓ 簡單 GPU 測試成功")
+        return True
+        
+    except Exception as e:
+        print(f"  ✗ 簡單 GPU 測試失敗: {e}")
+        torch.cuda.empty_cache()
+        return False
+
+
 def run_gpu_performance_test():
     """運行GPU性能測試"""
     print("="*60)
     print("GPU加速負樣本生成性能測試")
     print("="*60)
+    
+    # 先運行簡單GPU測試
+    print("首先運行簡單GPU測試...")
+    if not simple_gpu_test():
+        print("❌ 簡單GPU測試失敗，跳過完整測試")
+        return
     
     # 檢查GPU狀態
     if torch.cuda.is_available():
