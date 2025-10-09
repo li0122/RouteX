@@ -18,6 +18,9 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import time
 import os
+import torch.utils.data
+import torch.cuda
+from torch.utils.data import TensorDataset
 
 from dlrm_model import create_travel_dlrm, DLRMLoss
 from data_processor import load_and_process_data, POIDataProcessor, ReviewDataProcessor
@@ -72,7 +75,139 @@ def process_user_batch_for_negatives(args):
     return batch_negatives
 
 
-def parallel_negative_sampling(user_interacted, all_poi_ids, negative_ratio, max_workers=None):
+def gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device=None, batch_size=10000):
+    """
+    GPU加速的負樣本生成
+    使用CUDA進行大規模並行計算
+    """
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    if device.type == 'cpu':
+        print("  ⚠️ GPU不可用，回退到CPU模式")
+        return None
+    
+    print(f"  使用GPU加速: {device}")
+    
+    # 將POI轉為Tensor
+    poi_tensor = torch.tensor(all_poi_ids, dtype=torch.long, device=device)
+    num_pois = len(all_poi_ids)
+    
+    print(f"  GPU記憶體狀態: {torch.cuda.memory_allocated(device)/1024**3:.2f}GB / {torch.cuda.memory_reserved(device)/1024**3:.2f}GB")
+    
+    negative_samples = []
+    user_list = list(user_interacted.keys())
+    
+    # 分批處理以節省GPU記憶體
+    for batch_start in range(0, len(user_list), batch_size):
+        batch_end = min(batch_start + batch_size, len(user_list))
+        batch_users = user_list[batch_start:batch_end]
+        
+        print(f"    GPU批次: {batch_start//batch_size + 1}/{(len(user_list) + batch_size - 1)//batch_size} "
+              f"(用戶 {batch_start+1}-{batch_end})")
+        
+        # 為這個批次的用戶建立互動矩陣
+        batch_size_actual = len(batch_users)
+        interaction_matrix = torch.zeros(batch_size_actual, num_pois, dtype=torch.bool, device=device)
+        
+        # 填充互動矩陣
+        for i, user_id in enumerate(batch_users):
+            if user_id in user_interacted:
+                interacted_pois = list(user_interacted[user_id])
+                if interacted_pois:
+                    # 將POI ID轉換為索引
+                    poi_indices = [all_poi_ids.index(poi) for poi in interacted_pois if poi in all_poi_ids]
+                    if poi_indices:
+                        interaction_matrix[i, poi_indices] = True
+        
+        # GPU上的向量化運算
+        # 計算可用POI矩陣 (未互動的POI)
+        available_matrix = ~interaction_matrix  # shape: (batch_size, num_pois)
+        
+        # 計算每個用戶的可用POI數量
+        available_counts = available_matrix.sum(dim=1)  # shape: (batch_size,)
+        
+        # 計算每個用戶的互動POI數量
+        interaction_counts = interaction_matrix.sum(dim=1)  # shape: (batch_size,)
+        
+        # 計算目標負樣本數量
+        target_negatives = torch.minimum(
+            negative_ratio * interaction_counts,
+            torch.minimum(available_counts, torch.tensor(50, device=device))  # 最多50個負樣本
+        )
+        
+        # 為每個用戶生成負樣本
+        for i, user_id in enumerate(batch_users):
+            if target_negatives[i] <= 0:
+                continue
+            
+            # 獲取當前用戶的可用POI
+            available_mask = available_matrix[i]  # shape: (num_pois,)
+            available_poi_indices = torch.nonzero(available_mask, as_tuple=True)[0]
+            
+            if len(available_poi_indices) == 0:
+                continue
+            
+            # GPU上的隨機採樣
+            num_samples = min(int(target_negatives[i]), len(available_poi_indices))
+            if num_samples > 0:
+                # 隨機排列可用POI索引
+                perm = torch.randperm(len(available_poi_indices), device=device)[:num_samples]
+                selected_poi_indices = available_poi_indices[perm]
+                
+                # 轉換回原POI ID
+                selected_pois = poi_tensor[selected_poi_indices].cpu().numpy().tolist()
+                
+                # 添加到結果
+                for poi_id in selected_pois:
+                    negative_samples.append((user_id, poi_id, 0))
+        
+        # 清理GPU記憶體
+        del interaction_matrix, available_matrix, available_counts, interaction_counts, target_negatives
+        torch.cuda.empty_cache()
+        
+        if (batch_start // batch_size + 1) % 5 == 0:
+            print(f"      目前負樣本數: {len(negative_samples):,}")
+            print(f"      GPU記憶體: {torch.cuda.memory_allocated(device)/1024**3:.2f}GB")
+    
+    print(f"  GPU加速完成! 生成負樣本數: {len(negative_samples):,}")
+    return negative_samples
+
+
+def hybrid_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device=None, use_gpu=True, max_workers=None):
+    """
+    混合模式: GPU + CPU並行處理
+    根據數據規模和系統資源自動選擇最佳策略
+    """
+    user_count = len(user_interacted)
+    poi_count = len(all_poi_ids)
+    
+    print(f"  數據規模: {user_count:,} 用戶 × {poi_count:,} POI")
+    
+    # 智慧策略選擇
+    if use_gpu and torch.cuda.is_available() and user_count <= 50000 and poi_count <= 200000:
+        print(f"  選擇GPU加速模式 (數據規模適中)")
+        
+        # 嘗試GPU加速
+        try:
+            start_time = time.time()
+            result = gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device)
+            gpu_time = time.time() - start_time
+            
+            if result is not None:
+                print(f"  GPU處理耗時: {gpu_time:.2f}秒")
+                return result
+            else:
+                print(f"  GPU加速失敗，回退到CPU模式")
+        except Exception as e:
+            print(f"  GPU加速出錯: {e}")
+            print(f"  回退到CPU並行模式")
+    
+    # 回退到CPU並行處理
+    print(f"  使用CPU並行處理")
+    return parallel_negative_sampling(user_interacted, all_poi_ids, negative_ratio, max_workers)
+
+
     """
     並行負樣本生成
     """
@@ -237,7 +372,9 @@ class TravelRecommendDataset(Dataset):
         memory_efficient: bool = True,
         max_samples_in_memory: int = 50000,
         use_parallel: bool = True,
-        parallel_workers: int = None
+        parallel_workers: int = None,
+        use_gpu_sampling: bool = False,
+        gpu_batch_size: int = 10000
     ):
         self.poi_processor = poi_processor
         self.review_processor = review_processor
@@ -246,6 +383,8 @@ class TravelRecommendDataset(Dataset):
         self.max_samples_in_memory = max_samples_in_memory
         self.use_parallel = use_parallel
         self.parallel_workers = parallel_workers
+        self.use_gpu_sampling = use_gpu_sampling
+        self.gpu_batch_size = gpu_batch_size
         
         # 建立訓練樣本
         if memory_efficient:
@@ -313,16 +452,18 @@ class TravelRecommendDataset(Dataset):
         
         print(f"  有效用戶數: {len(user_interacted):,}")
         
-        # 策略4: 並行高效批量生成
-        print("  步驟3: 並行生成負樣本索引...")
+        # 策略4: GPU/並行混合高效生成
+        print("  步驟3: GPU/並行混合生成負樣本索引...")
         
         # 根據設置選擇處理方式
         if self.use_parallel:
-            # 使用並行處理
-            negative_samples = parallel_negative_sampling(
+            # 使用混合處理（GPU優先，CPU並行備用）
+            negative_samples = hybrid_negative_sampling(
                 user_interacted=user_interacted,
                 all_poi_ids=all_poi_ids,
                 negative_ratio=self.negative_ratio,
+                device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
+                use_gpu=self.use_gpu_sampling,
                 max_workers=self.parallel_workers
             )
         else:
@@ -725,6 +866,7 @@ def main(args):
     # 檢查並行處理設置
     use_parallel = not args.disable_parallel
     parallel_workers = args.parallel_workers
+    use_gpu_sampling = args.use_gpu_sampling
     
     if use_parallel:
         if parallel_workers is None:
@@ -733,6 +875,14 @@ def main(args):
     else:
         print("⚠️ 並行處理已禁用")
     
+    if use_gpu_sampling and torch.cuda.is_available():
+        print(f"✓ 啟用GPU加速負樣本生成")
+        print(f"  GPU設備: {torch.cuda.get_device_name()}")
+        print(f"  GPU記憶體: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    elif use_gpu_sampling:
+        print("⚠️ GPU不可用，將使用CPU處理")
+        use_gpu_sampling = False
+    
     dataset = TravelRecommendDataset(
         poi_processor, 
         review_processor, 
@@ -740,7 +890,9 @@ def main(args):
         memory_efficient=memory_efficient,
         max_samples_in_memory=args.max_samples_in_memory,
         use_parallel=use_parallel,
-        parallel_workers=parallel_workers
+        parallel_workers=parallel_workers,
+        use_gpu_sampling=use_gpu_sampling,
+        gpu_batch_size=args.gpu_batch_size
     )
     
     # 分割訓練/驗證集
@@ -921,6 +1073,8 @@ if __name__ == "__main__":
     # 並行處理參數
     parser.add_argument('--parallel-workers', type=int, default=None, help='並行處理進程數 (預設自動檢測)')
     parser.add_argument('--disable-parallel', action='store_true', help='禁用並行處理')
+    parser.add_argument('--use-gpu-sampling', action='store_true', help='啟用GPU加速負樣本生成')
+    parser.add_argument('--gpu-batch-size', type=int, default=10000, help='GPU處理批次大小')
     
     # 輸出參數
     parser.add_argument('--checkpoint-path', type=str, default='models/travel_dlrm.pth')
