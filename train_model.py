@@ -38,8 +38,8 @@ def gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_rat
     
     print(f"  使用GPU加速: {device}")
     
-    # 將POI轉為Tensor
-    poi_tensor = torch.tensor(all_poi_ids, dtype=torch.long, device=device)
+    # 創建POI ID到索引的映射
+    poi_to_idx = {poi_id: idx for idx, poi_id in enumerate(all_poi_ids)}
     num_pois = len(all_poi_ids)
     
     print(f"  GPU記憶體狀態: {torch.cuda.memory_allocated(device)/1024**3:.2f}GB / {torch.cuda.memory_reserved(device)/1024**3:.2f}GB")
@@ -65,7 +65,7 @@ def gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_rat
                 interacted_pois = list(user_interacted[user_id])
                 if interacted_pois:
                     # 將POI ID轉換為索引
-                    poi_indices = [all_poi_ids.index(poi) for poi in interacted_pois if poi in all_poi_ids]
+                    poi_indices = [poi_to_idx[poi] for poi in interacted_pois if poi in poi_to_idx]
                     if poi_indices:
                         interaction_matrix[i, poi_indices] = True
         
@@ -105,7 +105,7 @@ def gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_rat
                 selected_poi_indices = available_poi_indices[perm]
                 
                 # 轉換回原POI ID
-                selected_pois = poi_tensor[selected_poi_indices].cpu().numpy().tolist()
+                selected_pois = [all_poi_ids[idx.item()] for idx in selected_poi_indices]
                 
                 # 添加到結果
                 for poi_id in selected_pois:
@@ -239,7 +239,7 @@ class TravelRecommendDataset(Dataset):
         negative_ratio: int = 4,
         memory_efficient: bool = True,
         max_samples_in_memory: int = 50000,
-        gpu_batch_size: int = 10000
+        gpu_batch_size: int = 20000
     ):
         self.poi_processor = poi_processor
         self.review_processor = review_processor
