@@ -1,6 +1,7 @@
 """
 訓練旅行推薦模型
 支援大資料集的記憶體高效訓練
+支援多進程並行處理優化
 """
 
 import torch
@@ -13,9 +14,136 @@ from pathlib import Path
 import argparse
 from tqdm import tqdm
 import gc
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import time
+import os
 
 from dlrm_model import create_travel_dlrm, DLRMLoss
 from data_processor import load_and_process_data, POIDataProcessor, ReviewDataProcessor
+
+
+# 並行處理輔助函數
+def process_user_batch_for_negatives(args):
+    """
+    處理一批用戶的負樣本生成
+    這個函數將在子進程中執行
+    """
+    batch_users, user_interacted_batch, all_poi_ids, negative_ratio, max_negatives_per_user = args
+    
+    batch_negatives = []
+    all_poi_set = set(all_poi_ids)
+    
+    for user_id in batch_users:
+        if user_id not in user_interacted_batch:
+            continue
+            
+        interacted = user_interacted_batch[user_id]
+        available_count = len(all_poi_set) - len(interacted)
+        
+        if available_count <= 0:
+            continue
+        
+        # 計算目標負樣本數量
+        target_negatives = min(
+            negative_ratio * len(interacted),
+            available_count,
+            max_negatives_per_user
+        )
+        
+        if target_negatives <= 0:
+            continue
+        
+        # 高效採樣：隨機選擇然後過濾
+        if target_negatives >= available_count * 0.3:
+            # 如果需要的樣本數較多，直接計算差集
+            available_pois = list(all_poi_set - interacted)
+            neg_pois = available_pois[:target_negatives]
+        else:
+            # 隨機採樣策略
+            sample_size = min(target_negatives * 3, len(all_poi_ids))
+            candidates = np.random.choice(all_poi_ids, sample_size, replace=False)
+            neg_pois = [poi for poi in candidates if poi not in interacted][:target_negatives]
+        
+        # 添加到結果
+        for poi_id in neg_pois:
+            batch_negatives.append((user_id, poi_id, 0))
+    
+    return batch_negatives
+
+
+def parallel_negative_sampling(user_interacted, all_poi_ids, negative_ratio, max_workers=None):
+    """
+    並行負樣本生成
+    """
+    if max_workers is None:
+        max_workers = min(mp.cpu_count(), 16)  # 限制最大進程數
+    
+    print(f"  使用 {max_workers} 個進程並行處理...")
+    
+    user_list = list(user_interacted.keys())
+    batch_size = max(50, len(user_list) // (max_workers * 4))  # 動態調整批次大小
+    max_negatives_per_user = 100  # 每用戶最大負樣本數
+    
+    print(f"  批次大小: {batch_size}, 每用戶最大負樣本數: {max_negatives_per_user}")
+    
+    # 準備並行任務
+    tasks = []
+    for i in range(0, len(user_list), batch_size):
+        batch_users = user_list[i:i+batch_size]
+        
+        # 為這個批次提取相關的用戶互動資料
+        user_interacted_batch = {uid: user_interacted[uid] for uid in batch_users if uid in user_interacted}
+        
+        task_args = (
+            batch_users,
+            user_interacted_batch,
+            all_poi_ids,
+            negative_ratio,
+            max_negatives_per_user
+        )
+        tasks.append(task_args)
+    
+    print(f"  創建了 {len(tasks)} 個並行任務")
+    
+    # 並行執行
+    negative_samples = []
+    start_time = time.time()
+    
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        # 提交所有任務
+        future_to_task = {executor.submit(process_user_batch_for_negatives, task): i 
+                         for i, task in enumerate(tasks)}
+        
+        completed_tasks = 0
+        
+        # 收集結果
+        for future in as_completed(future_to_task):
+            task_idx = future_to_task[future]
+            try:
+                batch_result = future.result()
+                negative_samples.extend(batch_result)
+                
+                completed_tasks += 1
+                if completed_tasks % max(1, len(tasks) // 10) == 0:
+                    progress = completed_tasks / len(tasks) * 100
+                    elapsed = time.time() - start_time
+                    rate = completed_tasks / elapsed if elapsed > 0 else 0
+                    eta = (len(tasks) - completed_tasks) / rate if rate > 0 else 0
+                    
+                    print(f"    進度: {completed_tasks}/{len(tasks)} ({progress:.1f}%) "
+                          f"速度: {rate:.1f} 任務/秒 "
+                          f"預估剩餘: {eta:.0f}秒 "
+                          f"當前負樣本數: {len(negative_samples):,}")
+                    
+            except Exception as e:
+                print(f"    任務 {task_idx} 失敗: {e}")
+    
+    total_time = time.time() - start_time
+    print(f"  並行處理完成! 耗時: {total_time:.1f}秒")
+    print(f"  平均速度: {len(tasks)/total_time:.1f} 任務/秒")
+    
+    return negative_samples
 
 
 def load_data_in_shards(
@@ -107,13 +235,17 @@ class TravelRecommendDataset(Dataset):
         review_processor: ReviewDataProcessor,
         negative_ratio: int = 4,
         memory_efficient: bool = True,
-        max_samples_in_memory: int = 50000
+        max_samples_in_memory: int = 50000,
+        use_parallel: bool = True,
+        parallel_workers: int = None
     ):
         self.poi_processor = poi_processor
         self.review_processor = review_processor
         self.negative_ratio = negative_ratio
         self.memory_efficient = memory_efficient
         self.max_samples_in_memory = max_samples_in_memory
+        self.use_parallel = use_parallel
+        self.parallel_workers = parallel_workers
         
         # 建立訓練樣本
         if memory_efficient:
@@ -181,62 +313,47 @@ class TravelRecommendDataset(Dataset):
         
         print(f"  有效用戶數: {len(user_interacted):,}")
         
-        # 策略4: 超高效批量生成
-        print("  步驟3: 批量生成負樣本索引...")
-        negative_samples = []
-        batch_size = 2000
+        # 策略4: 並行高效批量生成
+        print("  步驟3: 並行生成負樣本索引...")
         
-        import sys
-        try:
-            from tqdm import tqdm
-        except ImportError:
-            def tqdm(iterable, desc="", file=None, ncols=None):
-                return iterable
-        
-        user_list = list(user_interacted.keys())
-        total_batches = (len(user_list) + batch_size - 1) // batch_size
-        
-        for batch_idx in tqdm(range(total_batches), desc="  處理批次", file=sys.stdout, ncols=80):
-            start_idx = batch_idx * batch_size
-            end_idx = min(start_idx + batch_size, len(user_list))
-            batch_users = user_list[start_idx:end_idx]
-            
-            for user_id in batch_users:
-                interacted = user_interacted[user_id]
+        # 根據設置選擇處理方式
+        if self.use_parallel:
+            # 使用並行處理
+            negative_samples = parallel_negative_sampling(
+                user_interacted=user_interacted,
+                all_poi_ids=all_poi_ids,
+                negative_ratio=self.negative_ratio,
+                max_workers=self.parallel_workers
+            )
+        else:
+            # 串行處理（原來的方式）
+            print("  使用串行處理...")
+            negative_samples = []
+            for user_id, interacted in user_interacted.items():
                 available_count = len(all_poi_set) - len(interacted)
-                
                 if available_count <= 0:
                     continue
                 
-                # 大幅降低負樣本數量
                 target_negatives = min(
                     self.negative_ratio * len(interacted),
                     available_count,
-                    100  # 索引模式下進一步降低
+                    100
                 )
                 
                 if target_negatives <= 0:
                     continue
                 
                 # 高效採樣
-                if target_negatives >= available_count * 0.5:
+                if target_negatives >= available_count * 0.3:
                     available_pois = list(all_poi_set - interacted)
                     neg_pois = available_pois[:target_negatives]
                 else:
-                    sample_size = min(target_negatives * 2, len(all_poi_ids))
+                    sample_size = min(target_negatives * 3, len(all_poi_ids))
                     candidates = np.random.choice(all_poi_ids, sample_size, replace=False)
                     neg_pois = [poi for poi in candidates if poi not in interacted][:target_negatives]
                 
                 for poi_id in neg_pois:
                     negative_samples.append((user_id, poi_id, 0))
-            
-            # 進度報告
-            if (batch_idx + 1) % 5 == 0:
-                processed = min(end_idx, len(user_list))
-                progress = processed / len(user_list) * 100
-                print(f"    已處理 {processed:,}/{len(user_list):,} 用戶 ({progress:.1f}%)")
-                print(f"    當前負樣本數: {len(negative_samples):,}")
-                gc.collect()
         
         print(f"\n✓ 成功生成 {len(negative_samples):,} 個負樣本索引")
         print(f"✓ 總樣本數: {len(samples) + len(negative_samples):,} (正樣本: {len(samples):,}, 負樣本: {len(negative_samples):,})")
@@ -604,12 +721,26 @@ def main(args):
     
     # 創建數據集
     print("\n創建訓練數據集...")
+    
+    # 檢查並行處理設置
+    use_parallel = not args.disable_parallel
+    parallel_workers = args.parallel_workers
+    
+    if use_parallel:
+        if parallel_workers is None:
+            parallel_workers = min(mp.cpu_count(), 16)
+        print(f"✓ 啟用並行處理，使用 {parallel_workers} 個進程")
+    else:
+        print("⚠️ 並行處理已禁用")
+    
     dataset = TravelRecommendDataset(
         poi_processor, 
         review_processor, 
         negative_ratio=args.negative_ratio,
         memory_efficient=memory_efficient,
-        max_samples_in_memory=args.max_samples_in_memory
+        max_samples_in_memory=args.max_samples_in_memory,
+        use_parallel=use_parallel,
+        parallel_workers=parallel_workers
     )
     
     # 分割訓練/驗證集
@@ -786,6 +917,10 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--learning-rate', type=float, default=0.001)
     parser.add_argument('--weight-decay', type=float, default=1e-5)
+    
+    # 並行處理參數
+    parser.add_argument('--parallel-workers', type=int, default=None, help='並行處理進程數 (預設自動檢測)')
+    parser.add_argument('--disable-parallel', action='store_true', help='禁用並行處理')
     
     # 輸出參數
     parser.add_argument('--checkpoint-path', type=str, default='models/travel_dlrm.pth')
