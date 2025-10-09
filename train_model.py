@@ -128,6 +128,7 @@ class TravelRecommendDataset(Dataset):
         samples = []
         
         # 正樣本: 用戶高評分的POI
+        print("正在生成正樣本...")
         for user_id, reviews in self.review_processor.user_reviews.items():
             for review in reviews:
                 rating = review.get('rating', 0)
@@ -136,41 +137,93 @@ class TravelRecommendDataset(Dataset):
                     if poi_id and poi_id in self.poi_processor.poi_index:
                         samples.append((user_id, poi_id, 1))
         
-        print(f"生成 {len(samples)} 個正樣本索引")
+        print(f"✓ 生成 {len(samples)} 個正樣本索引")
         
-        # 負樣本索引
+        # 負樣本索引 - 優化版本
+        print("正在生成負樣本...")
         all_poi_ids = list(self.poi_processor.poi_index.keys())
         user_ids = list(self.review_processor.user_reviews.keys())
+        all_poi_set = set(all_poi_ids)  # 轉為集合以提高查找效率
+        
+        print(f"  總用戶數: {len(user_ids):,}")
+        print(f"  總POI數: {len(all_poi_ids):,}")
+        print(f"  負樣本比例: {self.negative_ratio}:1")
         
         # 為每個用戶記錄已互動的 POI
+        print("  正在構建用戶互動記錄...")
         user_interacted = {}
         for user_id in user_ids:
             user_interacted[user_id] = set(
                 r.get('gmap_id') for r in self.review_processor.user_reviews[user_id]
+                if r.get('gmap_id') in self.poi_processor.poi_index
             )
         
-        # 生成負樣本（分批以節省記憶體）
+        # 生成負樣本（優化版本）
+        print("  正在生成負樣本索引...")
         negative_samples = []
-        batch_size = 1000
+        batch_size = 500  # 減小批次大小
         
-        for i in range(0, len(user_ids), batch_size):
+        import sys
+        try:
+            from tqdm import tqdm
+        except ImportError:
+            print("  ⚠️ tqdm 未安裝，使用簡單進度顯示")
+            # 定義簡單的進度顯示函數
+            def tqdm(iterable, desc="", file=None, ncols=None):
+                total = len(iterable) if hasattr(iterable, '__len__') else None
+                for i, item in enumerate(iterable):
+                    if total and i % max(1, total // 20) == 0:
+                        progress = i / total * 100
+                        print(f"    {desc}: {progress:.1f}% ({i}/{total})")
+                    yield item
+        
+        for i in tqdm(range(0, len(user_ids), batch_size), 
+                     desc="  處理用戶批次", 
+                     file=sys.stdout, ncols=80):
             batch_users = user_ids[i:i+batch_size]
+            
             for user_id in batch_users:
                 interacted = user_interacted[user_id]
-                available_pois = [p for p in all_poi_ids if p not in interacted]
+                
+                if len(interacted) == 0:
+                    continue
+                
+                # 使用集合運算快速找到未互動的POI
+                available_pois = list(all_poi_set - interacted)
                 
                 if available_pois:
-                    num_negatives = min(
+                    # 限制負樣本數量以避免記憶體問題
+                    max_negatives = min(
                         self.negative_ratio * len(interacted),
-                        len(available_pois)
+                        len(available_pois),
+                        1000  # 每個用戶最多1000個負樣本
                     )
-                    neg_pois = np.random.choice(available_pois, num_negatives, replace=False)
+                    
+                    if len(available_pois) <= max_negatives:
+                        neg_pois = available_pois
+                    else:
+                        neg_pois = np.random.choice(
+                            available_pois, max_negatives, replace=False
+                        )
+                    
                     for poi_id in neg_pois:
                         negative_samples.append((user_id, poi_id, 0))
+            
+            # 定期清理記憶體和顯示進度
+            if (i // batch_size + 1) % 10 == 0:
+                processed_users = min(i + batch_size, len(user_ids))
+                progress = processed_users / len(user_ids) * 100
+                print(f"    已處理 {processed_users:,}/{len(user_ids):,} 用戶 ({progress:.1f}%)")
+                print(f"    當前負樣本數: {len(negative_samples):,}")
+                gc.collect()
         
-        print(f"生成 {len(negative_samples)} 個負樣本索引")
+        print(f"\n✓ 成功生成 {len(negative_samples):,} 個負樣本索引")
+        print(f"✓ 總樣本數: {len(samples) + len(negative_samples):,} (正樣本: {len(samples):,}, 負樣本: {len(negative_samples):,})")
+        
         samples.extend(negative_samples)
+        print("  正在打亂樣本順序...")
         np.random.shuffle(samples)
+        print("✓ 樣本創建完成!")
         
         return samples
     
@@ -179,6 +232,7 @@ class TravelRecommendDataset(Dataset):
         samples = []
         
         # 正樣本: 用戶高評分的POI
+        print("正在生成正樣本...")
         for user_id, reviews in self.review_processor.user_reviews.items():
             for review in reviews:
                 rating = review.get('rating', 0)
@@ -189,38 +243,75 @@ class TravelRecommendDataset(Dataset):
                     if poi_id and poi_id in self.poi_processor.poi_index:
                         samples.append((user_id, poi_id, 1))
         
-        print(f"生成 {len(samples)} 個正樣本")
+        print(f"✓ 生成 {len(samples)} 個正樣本")
         
-        # 負樣本: 隨機未互動的POI
+        # 負樣本: 隨機未互動的POI（優化版本）
+        print("正在生成負樣本...")
         all_poi_ids = list(self.poi_processor.poi_index.keys())
+        all_poi_set = set(all_poi_ids)
         negative_samples = []
+        user_ids = list(self.review_processor.user_reviews.keys())
         
-        for user_id in self.review_processor.user_reviews.keys():
+        print(f"  總用戶數: {len(user_ids):,}")
+        print(f"  總POI數: {len(all_poi_ids):,}")
+        
+        import sys
+        try:
+            from tqdm import tqdm
+        except ImportError:
+            # 定義簡單的進度顯示函數
+            def tqdm(iterable, desc="", file=None, ncols=None):
+                total = len(iterable) if hasattr(iterable, '__len__') else None
+                for i, item in enumerate(iterable):
+                    if total and i % max(1, total // 20) == 0:
+                        progress = i / total * 100
+                        print(f"    {desc}: {progress:.1f}% ({i}/{total})")
+                    yield item
+        
+        for i, user_id in enumerate(tqdm(user_ids, desc="  處理用戶", file=sys.stdout, ncols=80)):
             # 用戶已互動的POI
             interacted_pois = set(
                 r.get('gmap_id') for r in self.review_processor.user_reviews[user_id]
+                if r.get('gmap_id') in self.poi_processor.poi_index
             )
             
-            # 隨機採樣未互動的POI
-            available_pois = [p for p in all_poi_ids if p not in interacted_pois]
+            if len(interacted_pois) == 0:
+                continue
+            
+            # 使用集合運算快速找到未互動的POI
+            available_pois = list(all_poi_set - interacted_pois)
             
             if available_pois:
-                num_negatives = min(
+                # 限制負樣本數量
+                max_negatives = min(
                     self.negative_ratio * len(interacted_pois),
-                    len(available_pois)
+                    len(available_pois),
+                    1000  # 每個用戶最多1000個負樣本
                 )
                 
-                neg_pois = np.random.choice(available_pois, num_negatives, replace=False)
+                if len(available_pois) <= max_negatives:
+                    neg_pois = available_pois
+                else:
+                    neg_pois = np.random.choice(available_pois, max_negatives, replace=False)
                 
                 for poi_id in neg_pois:
                     negative_samples.append((user_id, poi_id, 0))
+            
+            # 定期顯示進度
+            if (i + 1) % 1000 == 0:
+                progress = (i + 1) / len(user_ids) * 100
+                print(f"    已處理 {i+1:,}/{len(user_ids):,} 用戶 ({progress:.1f}%)")
+                print(f"    當前負樣本數: {len(negative_samples):,}")
         
-        print(f"生成 {len(negative_samples)} 個負樣本")
+        print(f"\n✓ 成功生成 {len(negative_samples):,} 個負樣本")
+        print(f"✓ 總樣本數: {len(samples) + len(negative_samples):,} (正樣本: {len(samples):,}, 負樣本: {len(negative_samples):,})")
         
         samples.extend(negative_samples)
         
         # 打亂
+        print("  正在打亂樣本順序...")
         np.random.shuffle(samples)
+        print("✓ 樣本創建完成!")
         
         return samples
     
@@ -361,16 +452,37 @@ def evaluate(
     all_labels = np.array(all_labels)
     
     # 計算指標
-    from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score
-    
-    predictions = (all_scores > 0.5).astype(int)
-    
-    metrics = {
-        'auc': roc_auc_score(all_labels, all_scores),
-        'accuracy': accuracy_score(all_labels, predictions),
-        'precision': precision_score(all_labels, predictions),
-        'recall': recall_score(all_labels, predictions)
-    }
+    try:
+        from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score
+        
+        predictions = (all_scores > 0.5).astype(int)
+        
+        metrics = {
+            'auc': roc_auc_score(all_labels, all_scores),
+            'accuracy': accuracy_score(all_labels, predictions),
+            'precision': precision_score(all_labels, predictions),
+            'recall': recall_score(all_labels, predictions)
+        }
+    except ImportError:
+        print("⚠️ sklearn 未安裝，使用簡單指標計算")
+        predictions = (all_scores > 0.5).astype(int)
+        
+        # 簡單指標計算
+        tp = np.sum((all_labels == 1) & (predictions == 1))
+        tn = np.sum((all_labels == 0) & (predictions == 0))
+        fp = np.sum((all_labels == 0) & (predictions == 1))
+        fn = np.sum((all_labels == 1) & (predictions == 0))
+        
+        accuracy = (tp + tn) / len(all_labels) if len(all_labels) > 0 else 0
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        
+        metrics = {
+            'auc': 0.5,  # 預設值
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall
+        }
     
     return metrics
 
