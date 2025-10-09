@@ -139,81 +139,102 @@ class TravelRecommendDataset(Dataset):
         
         print(f"✓ 生成 {len(samples)} 個正樣本索引")
         
-        # 負樣本索引 - 優化版本
-        print("正在生成負樣本...")
-        all_poi_ids = list(self.poi_processor.poi_index.keys())
+        # 超高效負樣本生成策略
+        print("正在生成負樣本（超高效索引模式）...")
         user_ids = list(self.review_processor.user_reviews.keys())
-        all_poi_set = set(all_poi_ids)  # 轉為集合以提高查找效率
+        all_poi_ids = list(self.poi_processor.poi_index.keys())
         
         print(f"  總用戶數: {len(user_ids):,}")
         print(f"  總POI數: {len(all_poi_ids):,}")
         print(f"  負樣本比例: {self.negative_ratio}:1")
         
-        # 為每個用戶記錄已互動的 POI
-        print("  正在構建用戶互動記錄...")
-        user_interacted = {}
+        # 策略1: 智慧用戶採樣
+        print("  步驟1: 篩選活躍用戶...")
+        active_users = []
         for user_id in user_ids:
-            user_interacted[user_id] = set(
+            reviews = self.review_processor.user_reviews[user_id]
+            if len(reviews) >= 2:  # 至少2條評論
+                ratings = [r.get('rating', 0) for r in reviews]
+                if len(set(ratings)) > 1 or max(ratings) >= 4.0:
+                    active_users.append(user_id)
+        
+        print(f"  篩選出 {len(active_users):,} 個活躍用戶")
+        
+        # 策略2: 控制計算量
+        max_users = min(50000, len(active_users))
+        if len(active_users) > max_users:
+            print(f"  隨機採樣 {max_users:,} 個用戶...")
+            active_users = np.random.choice(active_users, max_users, replace=False).tolist()
+        
+        # 策略3: 預計算用戶互動
+        print("  步驟2: 預計算用戶互動記錄...")
+        all_poi_set = set(all_poi_ids)
+        user_interacted = {}
+        
+        for user_id in active_users:
+            interacted = set(
                 r.get('gmap_id') for r in self.review_processor.user_reviews[user_id]
                 if r.get('gmap_id') in self.poi_processor.poi_index
             )
+            if len(interacted) > 0:
+                user_interacted[user_id] = interacted
         
-        # 生成負樣本（優化版本）
-        print("  正在生成負樣本索引...")
+        print(f"  有效用戶數: {len(user_interacted):,}")
+        
+        # 策略4: 超高效批量生成
+        print("  步驟3: 批量生成負樣本索引...")
         negative_samples = []
-        batch_size = 500  # 減小批次大小
+        batch_size = 2000
         
         import sys
         try:
             from tqdm import tqdm
         except ImportError:
-            print("  ⚠️ tqdm 未安裝，使用簡單進度顯示")
-            # 定義簡單的進度顯示函數
             def tqdm(iterable, desc="", file=None, ncols=None):
-                total = len(iterable) if hasattr(iterable, '__len__') else None
-                for i, item in enumerate(iterable):
-                    if total and i % max(1, total // 20) == 0:
-                        progress = i / total * 100
-                        print(f"    {desc}: {progress:.1f}% ({i}/{total})")
-                    yield item
+                return iterable
         
-        for i in tqdm(range(0, len(user_ids), batch_size), 
-                     desc="  處理用戶批次", 
-                     file=sys.stdout, ncols=80):
-            batch_users = user_ids[i:i+batch_size]
+        user_list = list(user_interacted.keys())
+        total_batches = (len(user_list) + batch_size - 1) // batch_size
+        
+        for batch_idx in tqdm(range(total_batches), desc="  處理批次", file=sys.stdout, ncols=80):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(user_list))
+            batch_users = user_list[start_idx:end_idx]
             
             for user_id in batch_users:
                 interacted = user_interacted[user_id]
+                available_count = len(all_poi_set) - len(interacted)
                 
-                if len(interacted) == 0:
+                if available_count <= 0:
                     continue
                 
-                # 使用集合運算快速找到未互動的POI
-                available_pois = list(all_poi_set - interacted)
+                # 大幅降低負樣本數量
+                target_negatives = min(
+                    self.negative_ratio * len(interacted),
+                    available_count,
+                    100  # 索引模式下進一步降低
+                )
                 
-                if available_pois:
-                    # 限制負樣本數量以避免記憶體問題
-                    max_negatives = min(
-                        self.negative_ratio * len(interacted),
-                        len(available_pois),
-                        1000  # 每個用戶最多1000個負樣本
-                    )
-                    
-                    if len(available_pois) <= max_negatives:
-                        neg_pois = available_pois
-                    else:
-                        neg_pois = np.random.choice(
-                            available_pois, max_negatives, replace=False
-                        )
-                    
-                    for poi_id in neg_pois:
-                        negative_samples.append((user_id, poi_id, 0))
+                if target_negatives <= 0:
+                    continue
+                
+                # 高效採樣
+                if target_negatives >= available_count * 0.5:
+                    available_pois = list(all_poi_set - interacted)
+                    neg_pois = available_pois[:target_negatives]
+                else:
+                    sample_size = min(target_negatives * 2, len(all_poi_ids))
+                    candidates = np.random.choice(all_poi_ids, sample_size, replace=False)
+                    neg_pois = [poi for poi in candidates if poi not in interacted][:target_negatives]
+                
+                for poi_id in neg_pois:
+                    negative_samples.append((user_id, poi_id, 0))
             
-            # 定期清理記憶體和顯示進度
-            if (i // batch_size + 1) % 10 == 0:
-                processed_users = min(i + batch_size, len(user_ids))
-                progress = processed_users / len(user_ids) * 100
-                print(f"    已處理 {processed_users:,}/{len(user_ids):,} 用戶 ({progress:.1f}%)")
+            # 進度報告
+            if (batch_idx + 1) % 5 == 0:
+                processed = min(end_idx, len(user_list))
+                progress = processed / len(user_list) * 100
+                print(f"    已處理 {processed:,}/{len(user_list):,} 用戶 ({progress:.1f}%)")
                 print(f"    當前負樣本數: {len(negative_samples):,}")
                 gc.collect()
         
@@ -228,7 +249,7 @@ class TravelRecommendDataset(Dataset):
         return samples
     
     def _create_samples(self) -> List[Tuple]:
-        """創建訓練樣本 (user, poi, label) - 標準模式"""
+        """創建訓練樣本 (user, poi, label) - 超高效模式"""
         samples = []
         
         # 正樣本: 用戶高評分的POI
@@ -245,63 +266,112 @@ class TravelRecommendDataset(Dataset):
         
         print(f"✓ 生成 {len(samples)} 個正樣本")
         
-        # 負樣本: 隨機未互動的POI（優化版本）
-        print("正在生成負樣本...")
-        all_poi_ids = list(self.poi_processor.poi_index.keys())
-        all_poi_set = set(all_poi_ids)
-        negative_samples = []
+        # 超高效負樣本生成策略
+        print("正在生成負樣本（超高效模式）...")
         user_ids = list(self.review_processor.user_reviews.keys())
+        all_poi_ids = list(self.poi_processor.poi_index.keys())
         
         print(f"  總用戶數: {len(user_ids):,}")
         print(f"  總POI數: {len(all_poi_ids):,}")
+        
+        # 策略1: 智慧用戶採樣 - 只處理活躍用戶
+        print("  步驟1: 篩選活躍用戶...")
+        active_users = []
+        for user_id in user_ids:
+            reviews = self.review_processor.user_reviews[user_id]
+            # 只保留有足夠互動且評分多樣的用戶
+            if len(reviews) >= 2:  # 至少2條評論
+                ratings = [r.get('rating', 0) for r in reviews]
+                if len(set(ratings)) > 1 or max(ratings) >= 4.0:  # 有評分變化或有高評分
+                    active_users.append(user_id)
+        
+        print(f"  篩選出 {len(active_users):,} 個活躍用戶 (原 {len(user_ids):,})")
+        
+        # 策略2: 進一步採樣以控制計算量
+        max_users_for_negatives = min(50000, len(active_users))  # 最多處理5萬用戶
+        if len(active_users) > max_users_for_negatives:
+            print(f"  隨機採樣 {max_users_for_negatives:,} 個用戶進行負樣本生成...")
+            active_users = np.random.choice(active_users, max_users_for_negatives, replace=False).tolist()
+        
+        # 策略3: 預計算所有用戶的互動POI
+        print("  步驟2: 預計算用戶互動記錄...")
+        all_poi_set = set(all_poi_ids)
+        user_interacted = {}
+        
+        for user_id in active_users:
+            interacted = set(
+                r.get('gmap_id') for r in self.review_processor.user_reviews[user_id]
+                if r.get('gmap_id') in self.poi_processor.poi_index
+            )
+            if len(interacted) > 0:
+                user_interacted[user_id] = interacted
+        
+        print(f"  有效用戶數: {len(user_interacted):,}")
+        
+        # 策略4: 批量生成負樣本
+        print("  步驟3: 批量生成負樣本...")
+        negative_samples = []
+        batch_size = 2000  # 增大批次
+        
+        user_list = list(user_interacted.keys())
+        total_batches = (len(user_list) + batch_size - 1) // batch_size
         
         import sys
         try:
             from tqdm import tqdm
         except ImportError:
-            # 定義簡單的進度顯示函數
             def tqdm(iterable, desc="", file=None, ncols=None):
-                total = len(iterable) if hasattr(iterable, '__len__') else None
-                for i, item in enumerate(iterable):
-                    if total and i % max(1, total // 20) == 0:
-                        progress = i / total * 100
-                        print(f"    {desc}: {progress:.1f}% ({i}/{total})")
-                    yield item
+                return iterable
         
-        for i, user_id in enumerate(tqdm(user_ids, desc="  處理用戶", file=sys.stdout, ncols=80)):
-            # 用戶已互動的POI
-            interacted_pois = set(
-                r.get('gmap_id') for r in self.review_processor.user_reviews[user_id]
-                if r.get('gmap_id') in self.poi_processor.poi_index
-            )
+        for batch_idx in tqdm(range(total_batches), desc="  處理批次", file=sys.stdout, ncols=80):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(user_list))
+            batch_users = user_list[start_idx:end_idx]
             
-            if len(interacted_pois) == 0:
-                continue
-            
-            # 使用集合運算快速找到未互動的POI
-            available_pois = list(all_poi_set - interacted_pois)
-            
-            if available_pois:
-                # 限制負樣本數量
-                max_negatives = min(
-                    self.negative_ratio * len(interacted_pois),
-                    len(available_pois),
-                    1000  # 每個用戶最多1000個負樣本
+            # 批次內並行處理
+            batch_negatives = []
+            for user_id in batch_users:
+                interacted = user_interacted[user_id]
+                
+                # 快速計算可用POI數量
+                available_count = len(all_poi_set) - len(interacted)
+                if available_count <= 0:
+                    continue
+                
+                # 動態調整負樣本數量
+                target_negatives = min(
+                    self.negative_ratio * len(interacted),
+                    available_count,
+                    200  # 大幅降低每用戶負樣本上限
                 )
                 
-                if len(available_pois) <= max_negatives:
-                    neg_pois = available_pois
-                else:
-                    neg_pois = np.random.choice(available_pois, max_negatives, replace=False)
+                if target_negatives <= 0:
+                    continue
                 
+                # 高效採樣：直接從所有POI中隨機選擇，然後過濾
+                if target_negatives >= available_count * 0.5:
+                    # 如果需要的樣本數接近可用數量，直接計算差集
+                    available_pois = list(all_poi_set - interacted)
+                    neg_pois = available_pois[:target_negatives]
+                else:
+                    # 隨機採樣策略：多採樣一些然後過濾
+                    sample_size = min(target_negatives * 3, len(all_poi_ids))
+                    candidates = np.random.choice(all_poi_ids, sample_size, replace=False)
+                    neg_pois = [poi for poi in candidates if poi not in interacted][:target_negatives]
+                
+                # 添加到批次結果
                 for poi_id in neg_pois:
-                    negative_samples.append((user_id, poi_id, 0))
+                    batch_negatives.append((user_id, poi_id, 0))
             
-            # 定期顯示進度
-            if (i + 1) % 1000 == 0:
-                progress = (i + 1) / len(user_ids) * 100
-                print(f"    已處理 {i+1:,}/{len(user_ids):,} 用戶 ({progress:.1f}%)")
+            negative_samples.extend(batch_negatives)
+            
+            # 定期報告進度
+            if (batch_idx + 1) % 5 == 0:
+                processed_users = min(end_idx, len(user_list))
+                progress = processed_users / len(user_list) * 100
+                print(f"    已處理 {processed_users:,}/{len(user_list):,} 用戶 ({progress:.1f}%)")
                 print(f"    當前負樣本數: {len(negative_samples):,}")
+                gc.collect()  # 清理記憶體
         
         print(f"\n✓ 成功生成 {len(negative_samples):,} 個負樣本")
         print(f"✓ 總樣本數: {len(samples) + len(negative_samples):,} (正樣本: {len(samples):,}, 負樣本: {len(negative_samples):,})")
@@ -693,8 +763,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="訓練旅行推薦模型")
     
     # 數據參數
-    parser.add_argument('--meta-path', type=str, default='datasets/meta-other.json')
-    parser.add_argument('--review-path', type=str, default='datasets/review-other.json')
+    parser.add_argument('--meta-path', type=str, default='datasets/meta-California.json.gz')
+    parser.add_argument('--review-path', type=str, default='datasets/review-California.json.gz')
     parser.add_argument('--max-pois', type=int, default=10000)
     parser.add_argument('--max-reviews', type=int, default=50000)
     parser.add_argument('--negative-ratio', type=int, default=4)
