@@ -14,8 +14,7 @@ from pathlib import Path
 import argparse
 from tqdm import tqdm
 import gc
-import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor, as_completed
+
 import time
 import os
 import torch.utils.data
@@ -26,53 +25,7 @@ from dlrm_model import create_travel_dlrm, DLRMLoss
 from data_processor import load_and_process_data, POIDataProcessor, ReviewDataProcessor
 
 
-# 並行處理輔助函數
-def process_user_batch_for_negatives(args):
-    """
-    處理一批用戶的負樣本生成
-    這個函數將在子進程中執行
-    """
-    batch_users, user_interacted_batch, all_poi_ids, negative_ratio, max_negatives_per_user = args
-    
-    batch_negatives = []
-    all_poi_set = set(all_poi_ids)
-    
-    for user_id in batch_users:
-        if user_id not in user_interacted_batch:
-            continue
-            
-        interacted = user_interacted_batch[user_id]
-        available_count = len(all_poi_set) - len(interacted)
-        
-        if available_count <= 0:
-            continue
-        
-        # 計算目標負樣本數量
-        target_negatives = min(
-            negative_ratio * len(interacted),
-            available_count,
-            max_negatives_per_user
-        )
-        
-        if target_negatives <= 0:
-            continue
-        
-        # 高效採樣：隨機選擇然後過濾
-        if target_negatives >= available_count * 0.3:
-            # 如果需要的樣本數較多，直接計算差集
-            available_pois = list(all_poi_set - interacted)
-            neg_pois = available_pois[:target_negatives]
-        else:
-            # 隨機採樣策略
-            sample_size = min(target_negatives * 3, len(all_poi_ids))
-            candidates = np.random.choice(all_poi_ids, sample_size, replace=False)
-            neg_pois = [poi for poi in candidates if poi not in interacted][:target_negatives]
-        
-        # 添加到結果
-        for poi_id in neg_pois:
-            batch_negatives.append((user_id, poi_id, 0))
-    
-    return batch_negatives
+
 
 
 def gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device=None, batch_size=10000):
@@ -81,11 +34,7 @@ def gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_rat
     使用CUDA進行大規模並行計算
     """
     if device is None:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    if device.type == 'cpu':
-        print("  ⚠️ GPU不可用，回退到CPU模式")
-        return None
+        device = torch.device('cuda')
     
     print(f"  使用GPU加速: {device}")
     
@@ -174,111 +123,30 @@ def gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_rat
     return negative_samples
 
 
-def hybrid_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device=None, use_gpu=True, max_workers=None):
+def pure_gpu_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device=None):
     """
-    混合模式: GPU + CPU並行處理
-    根據數據規模和系統資源自動選擇最佳策略
+    純GPU負樣本生成
+    強制使用GPU進行所有計算
     """
     user_count = len(user_interacted)
     poi_count = len(all_poi_ids)
     
     print(f"  數據規模: {user_count:,} 用戶 × {poi_count:,} POI")
+    print(f"  使用純GPU模式處理")
     
-    # 智慧策略選擇
-    if use_gpu and torch.cuda.is_available() and user_count <= 50000 and poi_count <= 200000:
-        print(f"  選擇GPU加速模式 (數據規模適中)")
-        
-        # 嘗試GPU加速
-        try:
-            start_time = time.time()
-            result = gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device)
-            gpu_time = time.time() - start_time
-            
-            if result is not None:
-                print(f"  GPU處理耗時: {gpu_time:.2f}秒")
-                return result
-            else:
-                print(f"  GPU加速失敗，回退到CPU模式")
-        except Exception as e:
-            print(f"  GPU加速出錯: {e}")
-            print(f"  回退到CPU並行模式")
+    if device is None:
+        device = torch.device('cuda')
     
-    # 回退到CPU並行處理
-    print(f"  使用CPU並行處理")
-    return parallel_negative_sampling(user_interacted, all_poi_ids, negative_ratio, max_workers)
-
-
-    """
-    並行負樣本生成
-    """
-    if max_workers is None:
-        max_workers = min(mp.cpu_count(), 16)  # 限制最大進程數
-    
-    print(f"  使用 {max_workers} 個進程並行處理...")
-    
-    user_list = list(user_interacted.keys())
-    batch_size = max(50, len(user_list) // (max_workers * 4))  # 動態調整批次大小
-    max_negatives_per_user = 100  # 每用戶最大負樣本數
-    
-    print(f"  批次大小: {batch_size}, 每用戶最大負樣本數: {max_negatives_per_user}")
-    
-    # 準備並行任務
-    tasks = []
-    for i in range(0, len(user_list), batch_size):
-        batch_users = user_list[i:i+batch_size]
-        
-        # 為這個批次提取相關的用戶互動資料
-        user_interacted_batch = {uid: user_interacted[uid] for uid in batch_users if uid in user_interacted}
-        
-        task_args = (
-            batch_users,
-            user_interacted_batch,
-            all_poi_ids,
-            negative_ratio,
-            max_negatives_per_user
-        )
-        tasks.append(task_args)
-    
-    print(f"  創建了 {len(tasks)} 個並行任務")
-    
-    # 並行執行
-    negative_samples = []
+    # 直接使用GPU加速處理
     start_time = time.time()
+    result = gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device)
+    gpu_time = time.time() - start_time
     
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        # 提交所有任務
-        future_to_task = {executor.submit(process_user_batch_for_negatives, task): i 
-                         for i, task in enumerate(tasks)}
-        
-        completed_tasks = 0
-        
-        # 收集結果
-        for future in as_completed(future_to_task):
-            task_idx = future_to_task[future]
-            try:
-                batch_result = future.result()
-                negative_samples.extend(batch_result)
-                
-                completed_tasks += 1
-                if completed_tasks % max(1, len(tasks) // 10) == 0:
-                    progress = completed_tasks / len(tasks) * 100
-                    elapsed = time.time() - start_time
-                    rate = completed_tasks / elapsed if elapsed > 0 else 0
-                    eta = (len(tasks) - completed_tasks) / rate if rate > 0 else 0
-                    
-                    print(f"    進度: {completed_tasks}/{len(tasks)} ({progress:.1f}%) "
-                          f"速度: {rate:.1f} 任務/秒 "
-                          f"預估剩餘: {eta:.0f}秒 "
-                          f"當前負樣本數: {len(negative_samples):,}")
-                    
-            except Exception as e:
-                print(f"    任務 {task_idx} 失敗: {e}")
-    
-    total_time = time.time() - start_time
-    print(f"  並行處理完成! 耗時: {total_time:.1f}秒")
-    print(f"  平均速度: {len(tasks)/total_time:.1f} 任務/秒")
-    
-    return negative_samples
+    print(f"  GPU處理耗時: {gpu_time:.2f}秒")
+    return result
+
+
+
 
 
 def load_data_in_shards(
@@ -371,9 +239,6 @@ class TravelRecommendDataset(Dataset):
         negative_ratio: int = 4,
         memory_efficient: bool = True,
         max_samples_in_memory: int = 50000,
-        use_parallel: bool = True,
-        parallel_workers: int = None,
-        use_gpu_sampling: bool = False,
         gpu_batch_size: int = 10000
     ):
         self.poi_processor = poi_processor
@@ -381,9 +246,6 @@ class TravelRecommendDataset(Dataset):
         self.negative_ratio = negative_ratio
         self.memory_efficient = memory_efficient
         self.max_samples_in_memory = max_samples_in_memory
-        self.use_parallel = use_parallel
-        self.parallel_workers = parallel_workers
-        self.use_gpu_sampling = use_gpu_sampling
         self.gpu_batch_size = gpu_batch_size
         
         # 建立訓練樣本
@@ -452,49 +314,16 @@ class TravelRecommendDataset(Dataset):
         
         print(f"  有效用戶數: {len(user_interacted):,}")
         
-        # 策略4: GPU/並行混合高效生成
-        print("  步驟3: GPU/並行混合生成負樣本索引...")
+        # 策略4: 純GPU高效生成
+        print("  步驟3: 純GPU生成負樣本索引...")
         
-        # 根據設置選擇處理方式
-        if self.use_parallel:
-            # 使用混合處理（GPU優先，CPU並行備用）
-            negative_samples = hybrid_negative_sampling(
-                user_interacted=user_interacted,
-                all_poi_ids=all_poi_ids,
-                negative_ratio=self.negative_ratio,
-                device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
-                use_gpu=self.use_gpu_sampling,
-                max_workers=self.parallel_workers
-            )
-        else:
-            # 串行處理（原來的方式）
-            print("  使用串行處理...")
-            negative_samples = []
-            for user_id, interacted in user_interacted.items():
-                available_count = len(all_poi_set) - len(interacted)
-                if available_count <= 0:
-                    continue
-                
-                target_negatives = min(
-                    self.negative_ratio * len(interacted),
-                    available_count,
-                    100
-                )
-                
-                if target_negatives <= 0:
-                    continue
-                
-                # 高效採樣
-                if target_negatives >= available_count * 0.3:
-                    available_pois = list(all_poi_set - interacted)
-                    neg_pois = available_pois[:target_negatives]
-                else:
-                    sample_size = min(target_negatives * 3, len(all_poi_ids))
-                    candidates = np.random.choice(all_poi_ids, sample_size, replace=False)
-                    neg_pois = [poi for poi in candidates if poi not in interacted][:target_negatives]
-                
-                for poi_id in neg_pois:
-                    negative_samples.append((user_id, poi_id, 0))
+        # 使用純GPU處理
+        negative_samples = pure_gpu_negative_sampling(
+            user_interacted=user_interacted,
+            all_poi_ids=all_poi_ids,
+            negative_ratio=self.negative_ratio,
+            device=torch.device('cuda')
+        )
         
         print(f"\n✓ 成功生成 {len(negative_samples):,} 個負樣本索引")
         print(f"✓ 總樣本數: {len(samples) + len(negative_samples):,} (正樣本: {len(samples):,}, 負樣本: {len(negative_samples):,})")
@@ -566,70 +395,15 @@ class TravelRecommendDataset(Dataset):
         
         print(f"  有效用戶數: {len(user_interacted):,}")
         
-        # 策略4: 批量生成負樣本
-        print("  步驟3: 批量生成負樣本...")
-        negative_samples = []
-        batch_size = 2000  # 增大批次
+        # 策略4: 純GPU生成負樣本
+        print("  步驟3: 純GPU生成負樣本...")
         
-        user_list = list(user_interacted.keys())
-        total_batches = (len(user_list) + batch_size - 1) // batch_size
-        
-        import sys
-        try:
-            from tqdm import tqdm
-        except ImportError:
-            def tqdm(iterable, desc="", file=None, ncols=None):
-                return iterable
-        
-        for batch_idx in tqdm(range(total_batches), desc="  處理批次", file=sys.stdout, ncols=80):
-            start_idx = batch_idx * batch_size
-            end_idx = min(start_idx + batch_size, len(user_list))
-            batch_users = user_list[start_idx:end_idx]
-            
-            # 批次內並行處理
-            batch_negatives = []
-            for user_id in batch_users:
-                interacted = user_interacted[user_id]
-                
-                # 快速計算可用POI數量
-                available_count = len(all_poi_set) - len(interacted)
-                if available_count <= 0:
-                    continue
-                
-                # 動態調整負樣本數量
-                target_negatives = min(
-                    self.negative_ratio * len(interacted),
-                    available_count,
-                    200  # 大幅降低每用戶負樣本上限
-                )
-                
-                if target_negatives <= 0:
-                    continue
-                
-                # 高效採樣：直接從所有POI中隨機選擇，然後過濾
-                if target_negatives >= available_count * 0.5:
-                    # 如果需要的樣本數接近可用數量，直接計算差集
-                    available_pois = list(all_poi_set - interacted)
-                    neg_pois = available_pois[:target_negatives]
-                else:
-                    # 隨機採樣策略：多採樣一些然後過濾
-                    sample_size = min(target_negatives * 3, len(all_poi_ids))
-                    candidates = np.random.choice(all_poi_ids, sample_size, replace=False)
-                    neg_pois = [poi for poi in candidates if poi not in interacted][:target_negatives]
-                
-                # 添加到批次結果
-                for poi_id in neg_pois:
-                    batch_negatives.append((user_id, poi_id, 0))
-            
-            negative_samples.extend(batch_negatives)
-            
-            # 定期報告進度
-            if (batch_idx + 1) % 5 == 0:
-                processed_users = min(end_idx, len(user_list))
-                progress = processed_users / len(user_list) * 100
-                print(f"    已處理 {processed_users:,}/{len(user_list):,} 用戶 ({progress:.1f}%)")
-                print(f"    當前負樣本數: {len(negative_samples):,}")
-                gc.collect()  # 清理記憶體
+        negative_samples = pure_gpu_negative_sampling(
+            user_interacted=user_interacted,
+            all_poi_ids=all_poi_ids,
+            negative_ratio=self.negative_ratio,
+            device=torch.device('cuda')
+        )
         
         print(f"\n✓ 成功生成 {len(negative_samples):,} 個負樣本")
         print(f"✓ 總樣本數: {len(samples) + len(negative_samples):,} (正樣本: {len(samples):,}, 負樣本: {len(negative_samples):,})")
@@ -863,25 +637,13 @@ def main(args):
     # 創建數據集
     print("\n創建訓練數據集...")
     
-    # 檢查並行處理設置
-    use_parallel = not args.disable_parallel
-    parallel_workers = args.parallel_workers
-    use_gpu_sampling = args.use_gpu_sampling
-    
-    if use_parallel:
-        if parallel_workers is None:
-            parallel_workers = min(mp.cpu_count(), 16)
-        print(f"✓ 啟用並行處理，使用 {parallel_workers} 個進程")
-    else:
-        print("⚠️ 並行處理已禁用")
-    
-    if use_gpu_sampling and torch.cuda.is_available():
-        print(f"✓ 啟用GPU加速負樣本生成")
+    # 檢查GPU設置
+    if torch.cuda.is_available():
+        print(f"✓ 使用GPU加速所有計算")
         print(f"  GPU設備: {torch.cuda.get_device_name()}")
         print(f"  GPU記憶體: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
-    elif use_gpu_sampling:
-        print("⚠️ GPU不可用，將使用CPU處理")
-        use_gpu_sampling = False
+    else:
+        raise RuntimeError("⚠️ GPU不可用，無法執行")
     
     dataset = TravelRecommendDataset(
         poi_processor, 
@@ -889,9 +651,6 @@ def main(args):
         negative_ratio=args.negative_ratio,
         memory_efficient=memory_efficient,
         max_samples_in_memory=args.max_samples_in_memory,
-        use_parallel=use_parallel,
-        parallel_workers=parallel_workers,
-        use_gpu_sampling=use_gpu_sampling,
         gpu_batch_size=args.gpu_batch_size
     )
     
@@ -1070,10 +829,7 @@ if __name__ == "__main__":
     parser.add_argument('--learning-rate', type=float, default=0.001)
     parser.add_argument('--weight-decay', type=float, default=1e-5)
     
-    # 並行處理參數
-    parser.add_argument('--parallel-workers', type=int, default=None, help='並行處理進程數 (預設自動檢測)')
-    parser.add_argument('--disable-parallel', action='store_true', help='禁用並行處理')
-    parser.add_argument('--use-gpu-sampling', action='store_true', help='啟用GPU加速負樣本生成')
+    # GPU處理參數
     parser.add_argument('--gpu-batch-size', type=int, default=10000, help='GPU處理批次大小')
     
     # 輸出參數
