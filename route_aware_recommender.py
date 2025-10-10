@@ -32,6 +32,13 @@ except ImportError:
 from dlrm_model import TravelDLRM, create_travel_dlrm
 from data_processor import POIDataProcessor
 
+try:
+    from simple_llm_filter import SimpleLLMFilter
+    LLM_FILTER_AVAILABLE = True
+except ImportError:
+    LLM_FILTER_AVAILABLE = False
+    print("⚠️ LLM過濾器不可用，將跳過LLM審核")
+
 
 class OSRMClient:
     """OSRM 路徑規劃客戶端 - 優化版"""
@@ -772,7 +779,8 @@ class RouteAwareRecommender:
         osrm_client: Optional[OSRMClient] = None,
         device: str = 'cpu',
         enable_spatial_index: bool = True,
-        enable_async: bool = True
+        enable_async: bool = True,
+        enable_llm_filter: bool = False
     ):
         self.model = model
         self.poi_processor = poi_processor
@@ -818,6 +826,19 @@ class RouteAwareRecommender:
             'async_requests_count': 0
         }
         
+        # 初始化LLM過濾器
+        self.enable_llm_filter = enable_llm_filter and LLM_FILTER_AVAILABLE
+        if self.enable_llm_filter:
+            try:
+                self.llm_filter = SimpleLLMFilter()
+                print(f"✅ LLM過濾器初始化成功")
+            except Exception as e:
+                print(f"⚠️ LLM過濾器初始化失敗: {e}")
+                self.enable_llm_filter = False
+                self.llm_filter = None
+        else:
+            self.llm_filter = None
+        
         self.model.to(self.device)
         self.model.eval()
         
@@ -826,6 +847,8 @@ class RouteAwareRecommender:
         print(f"   - 空間索引: {enabled_text}")
         async_text = "啟用" if self.enable_async else "禁用"
         print(f"   - 異步支持: {async_text}")
+        llm_text = "啟用" if self.enable_llm_filter else "禁用"
+        print(f"   - LLM過濾器: {llm_text}")
     
     def recommend_on_route(
         self,
@@ -1329,7 +1352,7 @@ class RouteAwareRecommender:
         top_k: int,
         user_profile: Dict = None
     ) -> List[Dict]:
-        """生成推薦結果"""
+        """生成推薦結果 - 包含LLM審核"""
         
         # 組合結果
         recommendations = []
@@ -1344,9 +1367,43 @@ class RouteAwareRecommender:
                 )
             })
         
-        # 排序並返回top-k
+        # 按分數排序
         recommendations.sort(key=lambda x: x['score'], reverse=True)
-        return recommendations[:top_k]
+        
+        # 🎯 核心功能：LLM逐一審核
+        if self.enable_llm_filter and self.llm_filter:
+            print(f"\n🤖 開始LLM逐一審核流程...")
+            print(f"   目標: TOP {top_k} 旅遊推薦")
+            print(f"   候選: {len(recommendations)} 個排序結果")
+            
+            # 提取POI用於LLM審核
+            ranked_pois = [rec['poi'] for rec in recommendations]
+            
+            # 使用LLM逐一審核，直到收集到target_k個通過的POI
+            approved_pois = self.llm_filter.sequential_llm_filter_top_k(
+                ranked_pois, 
+                target_k=top_k,
+                multiplier=3  # 搜索前 top_k * 3 個候選
+            )
+            
+            # 重新構建推薦結果（保持原始分數和詳細資訊）
+            final_recommendations = []
+            for approved_poi in approved_pois:
+                # 找到對應的原始推薦資訊
+                for rec in recommendations:
+                    if rec['poi'] == approved_poi:
+                        # 添加LLM審核標記
+                        rec['llm_approved'] = True
+                        final_recommendations.append(rec)
+                        break
+            
+            print(f"\n✅ LLM審核完成!")
+            print(f"   最終推薦: {len(final_recommendations)} 個")
+            
+            return final_recommendations
+        else:
+            # 不使用LLM過濾，直接返回top-k
+            return recommendations[:top_k]
     
     def _update_performance_stats(self, total_time: float):
         """更新性能統計"""
