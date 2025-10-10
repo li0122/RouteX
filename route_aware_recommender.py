@@ -124,7 +124,7 @@ class OSRMClient:
         end: Tuple[float, float]
     ) -> Dict[str, float]:
         """
-        計算繞道成本
+        計算繞道成本 - 優化版
         
         Returns:
             {
@@ -137,10 +137,53 @@ class OSRMClient:
                 'detour_ratio': 繞道比例
             }
         """
-        # 直達路線
-        direct_route = self.get_route(start, end)
-        
-        if not direct_route:
+        try:
+            # 直達路線
+            direct_route = self.get_route(start, end)
+            
+            if not direct_route:
+                # 如果直達路線失敗，使用距離估算
+                direct_distance = self._estimate_distance(start, end) * 1000  # 轉為米
+                direct_duration = direct_distance / 15  # 假設15m/s平均速度
+                
+                direct_route = {
+                    'distance': direct_distance,
+                    'duration': direct_duration
+                }
+            
+            # 經過waypoint的路線
+            route_1 = self.get_route(start, waypoint)
+            route_2 = self.get_route(waypoint, end)
+            
+            if not route_1 or not route_2:
+                # 如果繞道路線失敗，使用距離估算
+                dist_1 = self._estimate_distance(start, waypoint) * 1000
+                dist_2 = self._estimate_distance(waypoint, end) * 1000
+                
+                via_distance = dist_1 + dist_2
+                via_duration = via_distance / 15
+            else:
+                via_distance = route_1['distance'] + route_2['distance']
+                via_duration = route_1['duration'] + route_2['duration']
+            
+            extra_distance = max(0, via_distance - direct_route['distance'])
+            extra_duration = max(0, via_duration - direct_route['duration'])
+            
+            detour_ratio = via_distance / direct_route['distance'] if direct_route['distance'] > 0 else float('inf')
+            
+            return {
+                'direct_distance': direct_route['distance'],
+                'direct_duration': direct_route['duration'],
+                'via_distance': via_distance,
+                'via_duration': via_duration,
+                'extra_distance': extra_distance,
+                'extra_duration': extra_duration,
+                'detour_ratio': detour_ratio
+            }
+            
+        except Exception as e:
+            # 完全失敗時的備用策略
+            print(f"   繞道計算失敗: {e}")
             return {
                 'direct_distance': 0,
                 'direct_duration': 0,
@@ -150,32 +193,20 @@ class OSRMClient:
                 'extra_duration': 0,
                 'detour_ratio': 0
             }
+    
+    def _estimate_distance(self, start: Tuple[float, float], end: Tuple[float, float]) -> float:
+        """估算兩點間距離(公里)"""
+        import math
+        R = 6371  # 地球半徑
         
-        # 經過waypoint的路線
-        route_1 = self.get_route(start, waypoint)
-        route_2 = self.get_route(waypoint, end)
+        lat1, lon1, lat2, lon2 = map(math.radians, [start[0], start[1], end[0], end[1]])
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
         
-        if not route_1 or not route_2:
-            via_distance = float('inf')
-            via_duration = float('inf')
-        else:
-            via_distance = route_1['distance'] + route_2['distance']
-            via_duration = route_1['duration'] + route_2['duration']
+        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
         
-        extra_distance = max(0, via_distance - direct_route['distance'])
-        extra_duration = max(0, via_duration - direct_route['duration'])
-        
-        detour_ratio = via_distance / direct_route['distance'] if direct_route['distance'] > 0 else float('inf')
-        
-        return {
-            'direct_distance': direct_route['distance'],
-            'direct_duration': direct_route['duration'],
-            'via_distance': via_distance,
-            'via_duration': via_duration,
-            'extra_distance': extra_distance,
-            'extra_duration': extra_duration,
-            'detour_ratio': detour_ratio
-        }
+        return R * c
     
     async def batch_calculate_detours(
         self,
@@ -935,34 +966,84 @@ class RouteAwareRecommender:
         max_extra_duration: float,
         start_time: float
     ) -> List[Dict]:
-        """同步路線推薦流程 (回退模式)"""
+        """同步路線推薦流程 (回退模式) - 優化版"""
         
-        print("🐢 步驟4: 同步路線過濾...")
+        print(f"🐢 步驟4: 同步路線過濾 (快速模式)...")
         osrm_start = time.time()
         
-        # 逐個計算繞道成本
         valid_pois = []
         valid_detours = []
+        failed_requests = 0
         
-        for poi in filtered_pois:
-            poi_location = (poi['latitude'], poi['longitude'])
-            detour = self.osrm_client.calculate_detour(
-                start_location, poi_location, end_location
+        # 先測試直達路線
+        print(f"   測試直達路線: {start_location} → {end_location}")
+        direct_route = self.osrm_client.get_route(start_location, end_location)
+        
+        if not direct_route:
+            print(f"   ⚠️ 直達路線查詢失敗，使用降級策略")
+            # 降級策略: 使用距離估算
+            return self._fallback_distance_based_recommendation(
+                user_profile, filtered_pois, start_location, end_location, top_k
             )
+        
+        print(f"   直達路線: {direct_route['distance']/1000:.1f}km, {direct_route['duration']/60:.1f}分鐘")
+        
+        # 分批處理POI以提高效率
+        batch_size = 5  # 每批蔄5個POI
+        total_batches = (len(filtered_pois) + batch_size - 1) // batch_size
+        
+        for batch_idx in range(total_batches):
+            batch_start = batch_idx * batch_size
+            batch_end = min(batch_start + batch_size, len(filtered_pois))
+            batch_pois = filtered_pois[batch_start:batch_end]
             
-            if (detour['detour_ratio'] <= max_detour_ratio and 
-                detour['extra_duration'] <= max_extra_duration):
-                valid_pois.append(poi)
-                valid_detours.append(detour)
+            if batch_idx % 5 == 0:  # 每5批報告一次進度
+                print(f"   處理批次 {batch_idx+1}/{total_batches}...")
+            
+            for poi in batch_pois:
+                poi_location = (poi['latitude'], poi['longitude'])
+                
+                try:
+                    detour = self.osrm_client.calculate_detour(
+                        start_location, poi_location, end_location
+                    )
+                    
+                    # 放寬約束以提高成功率
+                    relaxed_detour_ratio = max_detour_ratio * 1.5  # 1.3 -> 1.95
+                    relaxed_extra_duration = max_extra_duration * 2  # 900s -> 1800s
+                    
+                    if (detour['detour_ratio'] <= relaxed_detour_ratio and 
+                        detour['extra_duration'] <= relaxed_extra_duration and
+                        detour['detour_ratio'] > 0):  # 確保有效數值
+                        valid_pois.append(poi)
+                        valid_detours.append(detour)
+                    
+                except Exception as e:
+                    failed_requests += 1
+                    if failed_requests <= 3:  # 只顯示前3個錯誤
+                        print(f"   OSRM查詢失敗: {e}")
+                    continue
+            
+            # 早停機制: 如果已經找到足夠的POI
+            if len(valid_pois) >= top_k * 2:  # 找到隙2倍的目標數量就停止
+                print(f"   早停: 已找到足夠的POI ({len(valid_pois)})")  
+                break
         
         osrm_time = time.time() - osrm_start
         print(f"   路線過濾完成: {len(valid_pois)} 個有效POI (耗時: {osrm_time:.3f}s)")
         
+        if failed_requests > 0:
+            print(f"   ⚠️ 失敗查詢: {failed_requests} 個")
+        
         if not valid_pois:
-            return []
+            print(f"   ⚠️ 沒有POI通過路線篩選，使用備用策略")
+            # 備用策略: 按距離推薦
+            return self._fallback_distance_based_recommendation(
+                user_profile, filtered_pois, start_location, end_location, top_k
+            )
         
         # 模型評分
-        print("🧠 步驟5: 模型評分...")
+        print(f"🧠 步驟5: 模型評分...")
         scores = self._score_pois(
             user_profile, valid_pois, start_location, end_location
         )
@@ -978,6 +1059,81 @@ class RouteAwareRecommender:
         
         print(f"\n✅ 推薦完成! 總耗時: {total_time:.3f}s")
         return recommendations
+    
+    def _fallback_distance_based_recommendation(
+        self,
+        user_profile: Dict,
+        pois: List[Dict],
+        start_location: Tuple[float, float],
+        end_location: Tuple[float, float],
+        top_k: int
+    ) -> List[Dict]:
+        """
+        備用策略: 基於距離的推薦
+        當OSRM失敗時使用
+        """
+        print(f"   使用備用策略: 基於距離的推薦")
+        
+        # 計算路線中點
+        mid_lat = (start_location[0] + end_location[0]) / 2
+        mid_lon = (start_location[1] + end_location[1]) / 2
+        
+        # 計算各POI到路線中點的距離
+        poi_distances = []
+        for poi in pois:
+            distance = self._haversine_distance(
+                mid_lat, mid_lon, poi['latitude'], poi['longitude']
+            )
+            poi_distances.append((poi, distance))
+        
+        # 按距離排序，取最近的
+        poi_distances.sort(key=lambda x: x[1])
+        
+        # 獲取前top_k個
+        selected_pois = [poi for poi, _ in poi_distances[:top_k * 2]]  # 多選一些用於評分
+        
+        if not selected_pois:
+            return []
+        
+        # 模型評分
+        scores = self._score_pois(
+            user_profile, selected_pois, start_location, end_location
+        )
+        
+        # 生成模擬繞道信息
+        mock_detours = []
+        for poi, distance in poi_distances[:len(selected_pois)]:
+            mock_detours.append({
+                'direct_distance': 500000,  # 500km 模擬
+                'direct_duration': 18000,   # 5小時模擬
+                'via_distance': 500000 + distance * 1000,
+                'via_duration': 18000 + distance * 60,
+                'extra_distance': distance * 1000,
+                'extra_duration': distance * 60,
+                'detour_ratio': 1.0 + (distance / 500)
+            })
+        
+        # 生成推薦結果
+        recommendations = self._generate_recommendations(
+            selected_pois, scores, mock_detours, top_k
+        )
+        
+        print(f"   備用策略生成 {len(recommendations)} 個推薦")
+        return recommendations
+    
+    def _haversine_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """計算兩點間距離(公里)"""
+        import math
+        R = 6371  # 地球半徑
+        
+        lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        
+        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        
+        return R * c
     
     def _generate_recommendations(
         self,
