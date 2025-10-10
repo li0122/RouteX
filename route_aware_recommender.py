@@ -582,58 +582,162 @@ class UserPreferenceModel:
         historical_visits: List[Dict]
     ) -> Dict[str, Any]:
         """
-        從歷史記錄建立用戶畫像
+        從歷史記錄建立深度用戶畫像
         
         Args:
             user_id: 用戶ID
             historical_visits: 歷史訪問記錄
         
         Returns:
-            用戶畫像
+            詳細用戶畫像
         """
         if not historical_visits:
             return self._default_profile()
         
-        # 統計特徵
+        # 統計基礎特徵
         ratings = [v.get('rating', 0) for v in historical_visits if v.get('rating')]
         categories = [v.get('category', 'Other') for v in historical_visits if v.get('category')]
+        price_levels = [v.get('price_level', 2) for v in historical_visits if v.get('price_level')]
+        visit_times = [v.get('visit_time', '') for v in historical_visits if v.get('visit_time')]
         
         from collections import Counter
         category_counts = Counter(categories)
+        price_counts = Counter(price_levels)
         
-        # 偏好類別
-        preferred_categories = [cat for cat, _ in category_counts.most_common(5)]
+        # 偏好類別分析 (按偏好強度排序)
+        total_visits = len(historical_visits)
+        category_preferences = {}
+        for cat, count in category_counts.items():
+            preference_strength = count / total_visits
+            category_preferences[cat] = preference_strength
         
-        # 平均評分
-        avg_rating = np.mean(ratings) if ratings else 3.0
+        # 按偏好強度排序
+        preferred_categories = [cat for cat, _ in 
+                              sorted(category_preferences.items(), 
+                                    key=lambda x: x[1], reverse=True)]
+        
+        # 評分習慣分析
+        avg_rating = np.mean(ratings) if ratings else 3.5
         rating_std = np.std(ratings) if len(ratings) > 1 else 0.5
         
-        # 活躍度
-        activity_level = len(historical_visits)
+        # 評分傾向分析
+        high_rating_ratio = len([r for r in ratings if r >= 4.0]) / len(ratings) if ratings else 0.5
+        rating_generosity = "慷慨" if high_rating_ratio > 0.7 else "嚴格" if high_rating_ratio < 0.3 else "中等"
         
+        # 價格偏好分析
+        avg_price_level = np.mean(price_levels) if price_levels else 2.0
+        price_std = np.std(price_levels) if len(price_levels) > 1 else 1.0
+        
+        # 價格敏感度分析
+        price_variance = price_std / (avg_price_level + 0.1)  # 避免除零
+        price_sensitivity = "高" if price_variance < 0.3 else "低" if price_variance > 0.7 else "中等"
+        
+        # 活躍度與探索性分析
+        activity_level = len(historical_visits)
+        category_diversity = len(set(categories)) / len(categories) if categories else 0
+        exploration_tendency = "高" if category_diversity > 0.6 else "低" if category_diversity < 0.3 else "中等"
+        
+        # 時間偏好分析 (如果有時間資料)
+        time_patterns = {}
+        if visit_times:
+            # 簡化的時間分析 - 實際應用中可以更詳細
+            morning_visits = len([t for t in visit_times if '0' <= t[:2] <= '11'])
+            afternoon_visits = len([t for t in visit_times if '12' <= t[:2] <= '17'])
+            evening_visits = len([t for t in visit_times if '18' <= t[:2] <= '23'])
+            
+            total_time_visits = morning_visits + afternoon_visits + evening_visits
+            if total_time_visits > 0:
+                time_patterns = {
+                    'morning_preference': morning_visits / total_time_visits,
+                    'afternoon_preference': afternoon_visits / total_time_visits,
+                    'evening_preference': evening_visits / total_time_visits
+                }
+        
+        # 建構完整用戶畫像
         profile = {
+            # 基礎資訊
             'user_id': user_id,
+            'num_visits': len(historical_visits),
+            'activity_level': activity_level,
+            
+            # 評分習慣
             'avg_rating': avg_rating,
             'rating_std': rating_std,
-            'preferred_categories': preferred_categories,
-            'activity_level': activity_level,
-            'num_visits': len(historical_visits),
-            'category_distribution': dict(category_counts)
+            'rating_generosity': rating_generosity,
+            'high_rating_ratio': high_rating_ratio,
+            
+            # 類別偏好
+            'preferred_categories': preferred_categories[:10],  # 前10個偏好
+            'category_distribution': dict(category_counts),
+            'category_preferences': category_preferences,
+            'exploration_tendency': exploration_tendency,
+            'category_diversity': category_diversity,
+            
+            # 價格偏好
+            'avg_price_level': avg_price_level,
+            'price_std': price_std,
+            'price_sensitivity': price_sensitivity,
+            'price_distribution': dict(price_counts),
+            
+            # 時間偏好
+            'time_patterns': time_patterns,
+            
+            # 行為特徵
+            'review_frequency': len(ratings) / total_visits if total_visits > 0 else 0,
+            'engagement_score': (len(ratings) / total_visits * 0.5 + 
+                               category_diversity * 0.3 + 
+                               min(activity_level / 20, 1.0) * 0.2) if total_visits > 0 else 0
         }
         
+        # 快取用戶畫像
         self.user_profiles[user_id] = profile
+        
+        # 輸出用戶畫像摘要
+        print(f"📊 用戶畫像建立完成:")
+        print(f"   偏好類別: {preferred_categories[:3]}")
+        print(f"   評分習慣: {avg_rating:.1f}⭐ ({rating_generosity})")
+        print(f"   價格偏好: {avg_price_level:.1f}級 ({price_sensitivity}敏感度)")
+        print(f"   探索傾向: {exploration_tendency}")
+        
         return profile
     
     def _default_profile(self) -> Dict:
-        """默認用戶畫像"""
+        """增強的默認用戶畫像"""
         return {
+            # 基礎資訊
             'user_id': 'unknown',
+            'num_visits': 0,
+            'activity_level': 0,
+            
+            # 評分習慣
             'avg_rating': 3.5,
             'rating_std': 0.5,
-            'preferred_categories': [],
-            'activity_level': 0,
-            'num_visits': 0,
-            'category_distribution': {}
+            'rating_generosity': '中等',
+            'high_rating_ratio': 0.5,
+            
+            # 類別偏好
+            'preferred_categories': ['Tourist Attraction', 'Restaurant', 'Shopping'],
+            'category_distribution': {},
+            'category_preferences': {},
+            'exploration_tendency': '中等',
+            'category_diversity': 0.5,
+            
+            # 價格偏好
+            'avg_price_level': 2.0,
+            'price_std': 1.0,
+            'price_sensitivity': '中等',
+            'price_distribution': {},
+            
+            # 時間偏好
+            'time_patterns': {
+                'morning_preference': 0.3,
+                'afternoon_preference': 0.4,
+                'evening_preference': 0.3
+            },
+            
+            # 行為特徵
+            'review_frequency': 0.5,
+            'engagement_score': 0.3
         }
     
     def get_user_features(self, user_id: str) -> np.ndarray:
@@ -838,53 +942,135 @@ class RouteAwareRecommender:
         user_history: List[Dict],
         max_candidates: int = 50
     ) -> List[Dict]:
-        """智能預過濾 - 減少無效計算"""
+        """
+        智能預過濾候選POI - 改進版
         
+        評分標準 (動態權重):
+        - 個人化類別偏好: 25-35%
+        - 評分質量: 20-30%  
+        - 熱門度與可信度: 15-25%
+        - 價格匹配度: 10-15%
+        - 營業時間便利性: 5-10%
+        - 特色標籤匹配: 5-10%
+        """
         if len(candidates) <= max_candidates:
             return candidates
         
-        # 提取用戶偏好
-        user_categories = set(h.get('category', '') for h in user_history)
-        user_avg_rating = np.mean([h.get('rating', 3.5) for h in user_history]) if user_history else 3.5
+        # 分析用戶歷史行為模式
+        user_categories = [item.get('category', 'Other') for item in user_history]
+        user_ratings = [item.get('rating', 3.0) for item in user_history if item.get('rating')]
+        user_price_levels = [item.get('price_level', 2) for item in user_history if item.get('price_level')]
         
-        # 評分函數
-        def score_candidate(poi):
-            score = 0
+        # 建立用戶偏好模型
+        category_scores = {}
+        for category in user_categories:
+            category_scores[category] = category_scores.get(category, 0) + 1
+        
+        total_history = len(user_history) or 1
+        for category in category_scores:
+            category_scores[category] /= total_history
+        
+        # 用戶評分習慣
+        avg_user_rating = np.mean(user_ratings) if user_ratings else 3.5
+        user_rating_std = np.std(user_ratings) if len(user_ratings) > 1 else 0.5
+        
+        # 用戶價格偏好
+        preferred_price_level = np.mean(user_price_levels) if user_price_levels else 2.0
+        
+        # 計算每個POI的預過濾分數
+        scored_pois = []
+        for poi in candidates:
+            score = 0.0
             
-            # 評分權重 (30%)
-            poi_rating = poi.get('avg_rating', 0)
-            if poi_rating > 0:
-                score += poi_rating * 0.3
+            # 1. 個人化類別偏好 (25-35%)
+            poi_category = poi.get('primary_category', 'Other')
+            category_preference = category_scores.get(poi_category, 0.1)
+            # 動態權重：類別偏好越強，權重越高
+            category_weight = 0.25 + (category_preference * 0.1)
+            score += category_preference * category_weight
             
-            # 類別匹配 (40%)
-            if poi.get('primary_category', '') in user_categories:
-                score += 2.0
+            # 2. 評分質量 (20-30%)
+            rating = poi.get('avg_rating', 3.0)
+            num_reviews = poi.get('num_reviews', 0)
             
-            # 熱門度 (20%)
-            review_count = poi.get('num_reviews', 0)
-            if review_count > 0:
-                score += min(np.log1p(review_count) * 0.1, 1.0)
+            # 考慮評分可信度（評論數越多越可信）
+            rating_confidence = min(num_reviews / 50.0, 1.0)
+            adjusted_rating = rating * rating_confidence + 3.0 * (1 - rating_confidence)
             
-            # 價格合適性 (10%)
+            # 與用戶評分習慣匹配度
+            rating_match = 1.0 - abs(adjusted_rating - avg_user_rating) / 5.0
+            rating_weight = 0.20 + (rating_confidence * 0.1)
+            score += (adjusted_rating / 5.0 * 0.7 + rating_match * 0.3) * rating_weight
+            
+            # 3. 熱門度與可信度 (15-25%)
+            popularity = min(num_reviews / 200.0, 1.0)
+            # 避免過度偏向熱門，平衡新穎性
+            balanced_popularity = popularity * 0.8 + 0.2
+            popularity_weight = 0.15 + (popularity * 0.1)
+            score += balanced_popularity * popularity_weight
+            
+            # 4. 價格匹配度 (10-15%)
             price_level = poi.get('price_level', 2)
-            if price_level <= 3:  # 不太貴
-                score += 0.5
+            price_match = 1.0 - abs(price_level - preferred_price_level) / 4.0
+            price_affordability = (4 - price_level) / 4.0
+            price_score = price_match * 0.6 + price_affordability * 0.4
+            score += price_score * 0.12
             
-            # 安全性檢查
-            if poi_rating < 2.0:  # 過低評分
-                score *= 0.5
+            # 5. 營業時間便利性 (5-10%)
+            time_convenience = 0.5  # 預設值
+            if poi.get('is_open_24h', False):
+                time_convenience = 1.0
+            elif poi.get('opening_hours'):  # 有營業時間資訊
+                time_convenience = 0.8
+            score += time_convenience * 0.07
             
-            return score
+            # 6. 特色標籤匹配 (5-10%)
+            special_bonus = 0.0
+            if poi.get('has_photos', False):
+                special_bonus += 0.2
+            if poi.get('has_website', False):
+                special_bonus += 0.1
+            if poi.get('wheelchair_accessible', False):
+                special_bonus += 0.1
+            if poi.get('good_for_groups', False):
+                special_bonus += 0.1
+            
+            score += min(special_bonus, 1.0) * 0.06
+            
+            # 7. 多樣性加分 (避免同質化推薦)
+            diversity_bonus = 0.0
+            if category_preference < 0.3:  # 對於非主要偏好類別給予額外機會
+                diversity_bonus = 0.1
+            score += diversity_bonus * 0.05
+            
+            scored_pois.append((poi, score))
         
-        # 計算分數並排序
-        scored_candidates = [(poi, score_candidate(poi)) for poi in candidates]
-        scored_candidates.sort(key=lambda x: x[1], reverse=True)
+        # 按分數排序並返回前max_candidates個
+        scored_pois.sort(key=lambda x: x[1], reverse=True)
         
-        # 返回前N個
-        filtered = [poi for poi, score in scored_candidates[:max_candidates]]
+        # 加入多樣性過濾，避免同類別過度集中
+        diversified_pois = []
+        category_counts = {}
+        max_per_category = max(3, max_candidates // 5)  # 每個類別最多佔20%
         
-        print(f"   預過濾: {len(candidates)} → {len(filtered)} (減少 {(1-len(filtered)/len(candidates))*100:.1f}%)")
-        return filtered
+        for poi, poi_score in scored_pois:
+            poi_category = poi.get('primary_category', 'Other')
+            if category_counts.get(poi_category, 0) < max_per_category:
+                diversified_pois.append(poi)
+                category_counts[poi_category] = category_counts.get(poi_category, 0) + 1
+                
+                if len(diversified_pois) >= max_candidates:
+                    break
+        
+        # 如果多樣性過濾後數量不足，補充高分POI
+        if len(diversified_pois) < max_candidates:
+            remaining_pois = [poi for poi, _ in scored_pois if poi not in diversified_pois]
+            diversified_pois.extend(remaining_pois[:max_candidates - len(diversified_pois)])
+        
+        print(f"   智能預過濾: {len(candidates)} → {len(diversified_pois)} (減少 {(1-len(diversified_pois)/len(candidates))*100:.1f}%)")
+        print(f"   類別分佈: {[(cat, count) for cat, count in category_counts.items() if count > 0]}")
+        
+        return diversified_pois
     
     async def _async_route_recommendation(
         self,
@@ -1266,43 +1452,102 @@ class RouteAwareRecommender:
         score: float,
         detour: Dict
     ) -> List[str]:
-        """生成推薦理由"""
+        """生成個性化推薦理由"""
         reasons = []
+        priority_reasons = []  # 高優先級理由
         
-        # 評分高
-        if poi.get('avg_rating', 0) >= 4.5:
-            reasons.append(f"⭐ 高評分景點 ({poi['avg_rating']:.1f}/5.0)")
-        
-        # 熱門
-        if poi.get('num_reviews', 0) > 100:
-            reasons.append(f"🔥 熱門景點 ({poi['num_reviews']} 條評論)")
-        
-        # 用戶偏好類別
+        # 1. 個人化匹配理由 (最重要)
         poi_category = poi.get('primary_category', '')
-        if poi_category in user_profile.get('preferred_categories', []):
-            reasons.append(f"💡 符合您的偏好 ({poi_category})")
+        user_categories = user_profile.get('preferred_categories', [])
         
-        # 繞道時間短
+        if poi_category in user_categories:
+            category_rank = user_categories.index(poi_category) + 1
+            if category_rank == 1:
+                priority_reasons.append(f"💖 完美符合您的最愛類型 ({poi_category})")
+            elif category_rank <= 3:
+                priority_reasons.append(f"💡 符合您的偏好 ({poi_category}，排名第{category_rank})")
+        
+        # 2. 質量與可信度
+        rating = poi.get('avg_rating', 0)
+        num_reviews = poi.get('num_reviews', 0)
+        
+        if rating >= 4.8 and num_reviews >= 50:
+            priority_reasons.append(f"� 頂級評分景點 ({rating:.1f}⭐，{num_reviews}+ 評論)")
+        elif rating >= 4.5 and num_reviews >= 20:
+            reasons.append(f"⭐ 高評分認證 ({rating:.1f}⭐，{num_reviews} 條評論)")
+        elif rating >= 4.0:
+            reasons.append(f"� 好評推薦 ({rating:.1f}⭐)")
+        
+        # 3. 路線便利性 (考慮用戶時間偏好)
         extra_minutes = detour['extra_duration'] / 60.0
-        if extra_minutes < 5:
-            reasons.append(f"🚗 幾乎不繞路 (僅需額外 {extra_minutes:.0f} 分鐘)")
-        elif extra_minutes < 15:
-            reasons.append(f"🚗 小幅繞路 (額外 {extra_minutes:.0f} 分鐘)")
+        detour_ratio = detour.get('detour_ratio', 0)
         
-        # 價格合適
+        if extra_minutes < 3:
+            priority_reasons.append(f"🎯 幾乎順路 (僅需額外 {extra_minutes:.0f} 分鐘)")
+        elif extra_minutes < 8:
+            reasons.append(f"🚗 輕鬆到達 (額外 {extra_minutes:.0f} 分鐘)")
+        elif extra_minutes < 20 and detour_ratio < 0.3:
+            reasons.append(f"🗺️ 適度繞行 (額外 {extra_minutes:.0f} 分鐘，值得一訪)")
+        
+        # 4. 價格與價值
         price_level = poi.get('price_level', 0)
-        if price_level <= 2:
-            reasons.append("💰 價格實惠")
+        user_avg_price = user_profile.get('avg_price_level', 2.0)
         
-        # 24小時營業
+        if price_level <= user_avg_price - 0.5:
+            reasons.append("💰 超值選擇")
+        elif price_level <= user_avg_price:
+            reasons.append("💵 價格合理")
+        elif price_level == 0:
+            reasons.append("🆓 免費景點")
+        
+        # 5. 特色與便利性
+        special_features = []
         if poi.get('is_open_24h', False):
-            reasons.append("🕐 24小時營業")
+            special_features.append("🕐 24小時營業")
+        if poi.get('wheelchair_accessible', False):
+            special_features.append("♿ 無障礙設施")
+        if poi.get('good_for_groups', False):
+            special_features.append("👥 適合團體")
+        if poi.get('has_parking', False):
+            special_features.append("🅿️ 有停車場")
+        if poi.get('pet_friendly', False):
+            special_features.append("🐕 寵物友善")
         
-        # 推薦分數高
-        if score > 0.8:
-            reasons.append("⭐ 強烈推薦!")
+        if special_features:
+            reasons.append(f"✨ {special_features[0]}")
         
-        return reasons[:3]  # 最多返回3個理由
+        # 6. 熱門度與趨勢
+        if num_reviews > 500:
+            reasons.append(f"� 超人氣景點 ({num_reviews}+ 遊客推薦)")
+        elif num_reviews > 100:
+            reasons.append(f"📈 熱門選擇 ({num_reviews} 條評論)")
+        
+        # 7. 推薦強度
+        if score > 0.85:
+            priority_reasons.append("⭐ AI 強烈推薦!")
+        elif score > 0.75:
+            reasons.append("👌 AI 推薦")
+        
+        # 8. 獨特性與發現價值
+        if num_reviews < 20 and rating >= 4.2:
+            reasons.append("💎 隱藏寶石 (小眾但高品質)")
+        
+        # 9. 季節性或時間相關
+        import datetime
+        current_hour = datetime.datetime.now().hour
+        if poi.get('good_for_evening', False) and current_hour >= 17:
+            reasons.append("🌆 夜晚好去處")
+        elif poi.get('good_for_morning', False) and current_hour <= 11:
+            reasons.append("🌅 晨間推薦")
+        
+        # 組合最終理由 (優先級理由 + 一般理由)
+        final_reasons = priority_reasons[:2] + reasons
+        
+        # 確保至少有一個理由
+        if not final_reasons:
+            final_reasons.append(f"📍 推薦景點 (評分 {rating:.1f}⭐)")
+        
+        return final_reasons[:4]  # 最多返回4個理由，提供更豐富的資訊
 
 
 def create_route_recommender(
