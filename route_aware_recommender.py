@@ -943,7 +943,7 @@ class RouteAwareRecommender:
         
         # 生成推薦結果
         recommendations = self._generate_recommendations(
-            valid_pois, scores, valid_detours, top_k
+            valid_pois, scores, valid_detours, top_k, user_profile
         )
         
         # 更新性能統計
@@ -1050,7 +1050,7 @@ class RouteAwareRecommender:
         
         # 生成推薦結果
         recommendations = self._generate_recommendations(
-            valid_pois, scores, valid_detours, top_k
+            valid_pois, scores, valid_detours, top_k, user_profile
         )
         
         # 更新性能統計
@@ -1115,7 +1115,7 @@ class RouteAwareRecommender:
         
         # 生成推薦結果
         recommendations = self._generate_recommendations(
-            selected_pois, scores, mock_detours, top_k
+            selected_pois, scores, mock_detours, top_k, {'preferred_categories': []}
         )
         
         print(f"   備用策略生成 {len(recommendations)} 個推薦")
@@ -1140,7 +1140,8 @@ class RouteAwareRecommender:
         pois: List[Dict],
         scores: List[float],
         detours: List[Dict],
-        top_k: int
+        top_k: int,
+        user_profile: Dict = None
     ) -> List[Dict]:
         """生成推薦結果"""
         
@@ -1153,7 +1154,7 @@ class RouteAwareRecommender:
                 'detour_info': detour,
                 'extra_time_minutes': detour['extra_duration'] / 60.0,
                 'reasons': self._generate_recommendation_reasons(
-                    poi, score, detour
+                    poi, user_profile or {}, score, detour
                 )
             })
         
