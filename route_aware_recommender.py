@@ -1264,7 +1264,7 @@ class RouteAwareRecommender:
         poi: Dict,
         user_profile: Dict,
         score: float,
-        detour_info: Dict
+        detour: Dict
     ) -> List[str]:
         """生成推薦理由"""
         reasons = []
@@ -1283,7 +1283,7 @@ class RouteAwareRecommender:
             reasons.append(f"💡 符合您的偏好 ({poi_category})")
         
         # 繞道時間短
-        extra_minutes = detour_info['extra_duration'] / 60.0
+        extra_minutes = detour['extra_duration'] / 60.0
         if extra_minutes < 5:
             reasons.append(f"🚗 幾乎不繞路 (僅需額外 {extra_minutes:.0f} 分鐘)")
         elif extra_minutes < 15:
