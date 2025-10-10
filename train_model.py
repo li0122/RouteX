@@ -4,6 +4,11 @@
 支援多進程並行處理優化
 """
 
+import os
+# GPU記憶體優化設置
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+os.environ['CUDA_LAUNCH_BLOCKING'] = '0'  # 提高性能
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -28,10 +33,10 @@ from data_processor import load_and_process_data, POIDataProcessor, ReviewDataPr
 
 
 
-def gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device=None, batch_size=10000):
+def gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device=None, batch_size=500):
     """
-    GPU加速的負樣本生成
-    使用CUDA進行大規模並行計算
+    GPU加速的負樣本生成 - 記憶體優化版
+    使用小批次處理避免記憶體溢出
     """
     if device is None:
         device = torch.device('cuda')
@@ -41,105 +46,165 @@ def gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_rat
     # 創建POI ID到索引的映射
     poi_to_idx = {poi_id: idx for idx, poi_id in enumerate(all_poi_ids)}
     num_pois = len(all_poi_ids)
-    
-    print(f"  GPU記憶體狀態: {torch.cuda.memory_allocated(device)/1024**3:.2f}GB / {torch.cuda.memory_reserved(device)/1024**3:.2f}GB")
-    
-    negative_samples = []
     user_list = list(user_interacted.keys())
     
+    print(f"  數據規模: {len(user_list):,} 用戶 × {num_pois:,} POI")
+    print(f"  GPU記憶體狀態: {torch.cuda.memory_allocated(device)/1024**3:.2f}GB / {torch.cuda.memory_reserved(device)/1024**3:.2f}GB")
+    
+    # 計算記憶體需求並動態調整批次大小
+    memory_per_user_mb = num_pois * 1 / (1024 * 1024)  # 每用戶需要的記憶體(MB)
+    available_memory_gb = 30  # 保守估計可用記憶體
+    max_users_per_batch = int(available_memory_gb * 1024 / memory_per_user_mb)
+    
+    # 動態調整批次大小
+    optimal_batch_size = min(batch_size, max_users_per_batch, 200)  # 最多200用戶一批
+    print(f"  優化批次大小: {optimal_batch_size} 用戶/批次")
+    print(f"  預估記憶體需求: {optimal_batch_size * memory_per_user_mb:.1f}MB/批次")
+    
+    negative_samples = []
+    total_batches = (len(user_list) + optimal_batch_size - 1) // optimal_batch_size
+    
     # 分批處理以節省GPU記憶體
-    for batch_start in range(0, len(user_list), batch_size):
-        batch_end = min(batch_start + batch_size, len(user_list))
+    for batch_idx in range(total_batches):
+        batch_start = batch_idx * optimal_batch_size
+        batch_end = min(batch_start + optimal_batch_size, len(user_list))
         batch_users = user_list[batch_start:batch_end]
         
-        print(f"    GPU批次: {batch_start//batch_size + 1}/{(len(user_list) + batch_size - 1)//batch_size} "
-              f"(用戶 {batch_start+1}-{batch_end})")
+        print(f"    GPU批次 {batch_idx+1}/{total_batches}: 用戶 {batch_start+1}-{batch_end}")
         
-        # 為這個批次的用戶建立互動矩陣
-        batch_size_actual = len(batch_users)
-        interaction_matrix = torch.zeros(batch_size_actual, num_pois, dtype=torch.bool, device=device)
-        
-        # 填充互動矩陣
-        for i, user_id in enumerate(batch_users):
-            if user_id in user_interacted:
-                interacted_pois = list(user_interacted[user_id])
-                if interacted_pois:
-                    # 將POI ID轉換為索引
-                    poi_indices = [poi_to_idx[poi] for poi in interacted_pois if poi in poi_to_idx]
-                    if poi_indices:
-                        interaction_matrix[i, poi_indices] = True
-        
-        # GPU上的向量化運算
-        # 計算可用POI矩陣 (未互動的POI)
-        available_matrix = ~interaction_matrix  # shape: (batch_size, num_pois)
-        
-        # 計算每個用戶的可用POI數量
-        available_counts = available_matrix.sum(dim=1)  # shape: (batch_size,)
-        
-        # 計算每個用戶的互動POI數量
-        interaction_counts = interaction_matrix.sum(dim=1)  # shape: (batch_size,)
-        
-        # 計算目標負樣本數量
-        target_negatives = torch.minimum(
-            negative_ratio * interaction_counts,
-            torch.minimum(available_counts, torch.tensor(50, device=device))  # 最多50個負樣本
-        )
-        
-        # 為每個用戶生成負樣本
-        for i, user_id in enumerate(batch_users):
-            if target_negatives[i] <= 0:
-                continue
+        try:
+            # 處理當前批次
+            batch_negatives = process_user_batch_gpu(
+                batch_users, user_interacted, poi_to_idx, all_poi_ids, 
+                negative_ratio, device, num_pois
+            )
             
-            # 獲取當前用戶的可用POI
-            available_mask = available_matrix[i]  # shape: (num_pois,)
-            available_poi_indices = torch.nonzero(available_mask, as_tuple=True)[0]
+            negative_samples.extend(batch_negatives)
             
-            if len(available_poi_indices) == 0:
-                continue
+            # 清理GPU記憶體
+            torch.cuda.empty_cache()
             
-            # GPU上的隨機採樣
-            num_samples = min(int(target_negatives[i]), len(available_poi_indices))
-            if num_samples > 0:
-                # 隨機排列可用POI索引
-                perm = torch.randperm(len(available_poi_indices), device=device)[:num_samples]
-                selected_poi_indices = available_poi_indices[perm]
+            if (batch_idx + 1) % 5 == 0:
+                print(f"      進度: {batch_idx+1}/{total_batches} ({(batch_idx+1)/total_batches*100:.1f}%)")
+                print(f"      當前負樣本數: {len(negative_samples):,}")
+                print(f"      GPU記憶體: {torch.cuda.memory_allocated(device)/1024**3:.2f}GB")
                 
-                # 轉換回原POI ID
-                selected_pois = [all_poi_ids[idx.item()] for idx in selected_poi_indices]
-                
-                # 添加到結果
-                for poi_id in selected_pois:
-                    negative_samples.append((user_id, poi_id, 0))
-        
-        # 清理GPU記憶體
-        del interaction_matrix, available_matrix, available_counts, interaction_counts, target_negatives
-        torch.cuda.empty_cache()
-        
-        if (batch_start // batch_size + 1) % 5 == 0:
-            print(f"      目前負樣本數: {len(negative_samples):,}")
-            print(f"      GPU記憶體: {torch.cuda.memory_allocated(device)/1024**3:.2f}GB")
+        except torch.cuda.OutOfMemoryError:
+            print(f"      批次 {batch_idx+1} GPU記憶體不足，跳過")
+            torch.cuda.empty_cache()
+            continue
+        except Exception as e:
+            print(f"      批次 {batch_idx+1} 處理失敗: {e}")
+            continue
     
     print(f"  GPU加速完成! 生成負樣本數: {len(negative_samples):,}")
     return negative_samples
 
 
+def process_user_batch_gpu(batch_users, user_interacted, poi_to_idx, all_poi_ids, negative_ratio, device, num_pois):
+    """
+    處理單個用戶批次的GPU計算
+    """
+    batch_size_actual = len(batch_users)
+    max_negatives_per_user = 50  # 限制每用戶負樣本數
+    
+    # 創建較小的互動矩陣
+    interaction_matrix = torch.zeros(batch_size_actual, num_pois, dtype=torch.bool, device=device)
+    
+    # 填充互動矩陣
+    for i, user_id in enumerate(batch_users):
+        if user_id in user_interacted:
+            interacted_pois = list(user_interacted[user_id])
+            if interacted_pois:
+                # 將POI ID轉換為索引
+                poi_indices = [poi_to_idx[poi] for poi in interacted_pois if poi in poi_to_idx]
+                if poi_indices:
+                    interaction_matrix[i, poi_indices] = True
+    
+    # GPU向量化運算
+    available_matrix = ~interaction_matrix
+    available_counts = available_matrix.sum(dim=1)
+    interaction_counts = interaction_matrix.sum(dim=1)
+        
+    # 計算目標負樣本數量
+    target_negatives = torch.minimum(
+        negative_ratio * interaction_counts,
+        torch.minimum(available_counts, torch.tensor(max_negatives_per_user, device=device))
+    )
+    
+    batch_negatives = []
+    
+    # 為每個用戶生成負樣本
+    for i, user_id in enumerate(batch_users):
+        if target_negatives[i] <= 0:
+            continue
+        
+        # 獲取當前用戶的可用POI
+        available_mask = available_matrix[i]
+        available_poi_indices = torch.nonzero(available_mask, as_tuple=True)[0]
+        
+        if len(available_poi_indices) == 0:
+            continue
+        
+        # GPU上的隨機採樣
+        num_samples = min(int(target_negatives[i]), len(available_poi_indices))
+        if num_samples > 0:
+            # 隨機排列可用POI索引
+            perm = torch.randperm(len(available_poi_indices), device=device)[:num_samples]
+            selected_poi_indices = available_poi_indices[perm]
+            
+            # 轉換回原POI ID
+            selected_pois = [all_poi_ids[idx.item()] for idx in selected_poi_indices]
+            
+            # 添加到批次結果
+            for poi_id in selected_pois:
+                batch_negatives.append((user_id, poi_id, 0))
+    
+    # 清理GPU記憶體
+    del interaction_matrix, available_matrix, available_counts, interaction_counts, target_negatives
+    
+    return batch_negatives
+
+
 def pure_gpu_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device=None):
     """
-    純GPU負樣本生成
-    強制使用GPU進行所有計算
+    純GPU負樣本生成 - 記憶體優化版
+    強制使用GPU進行所有計算，但使用小批次避免記憶體溢出
     """
     user_count = len(user_interacted)
     poi_count = len(all_poi_ids)
     
     print(f"  數據規模: {user_count:,} 用戶 × {poi_count:,} POI")
-    print(f"  使用純GPU模式處理")
+    print(f"  使用純GPU模式處理 (記憶體優化)")
     
     if device is None:
         device = torch.device('cuda')
     
-    # 直接使用GPU加速處理
+    # 檢查GPU記憶體並設置安全的批次大小
+    if torch.cuda.is_available():
+        total_memory = torch.cuda.get_device_properties(device).total_memory / 1024**3
+        allocated_memory = torch.cuda.memory_allocated(device) / 1024**3
+        free_memory = total_memory - allocated_memory
+        
+        print(f"  GPU記憶體: {free_memory:.1f}GB 可用 / {total_memory:.1f}GB 總計")
+        
+        # 根據可用記憶體動態調整批次大小
+        if free_memory > 40:
+            batch_size = 300
+        elif free_memory > 20:
+            batch_size = 150
+        else:
+            batch_size = 50
+    else:
+        batch_size = 50
+    
+    print(f"  設置批次大小: {batch_size} 用戶/批次")
+    
+    # 使用記憶體優化的GPU加速處理
     start_time = time.time()
-    result = gpu_accelerated_negative_sampling(user_interacted, all_poi_ids, negative_ratio, device)
+    result = gpu_accelerated_negative_sampling(
+        user_interacted, all_poi_ids, negative_ratio, device, batch_size
+    )
     gpu_time = time.time() - start_time
     
     print(f"  GPU處理耗時: {gpu_time:.2f}秒")
@@ -599,6 +664,19 @@ def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"\n使用設備: {device}")
     
+    # GPU記憶體優化設置
+    if torch.cuda.is_available():
+        print(f"GPU設備: {torch.cuda.get_device_name()}")
+        print(f"GPU記憶體: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+        
+        # 設置記憶體分配策略
+        torch.cuda.set_per_process_memory_fraction(0.9)  # 使用90%GPU記憶體
+        torch.cuda.empty_cache()  # 清理現有記憶體
+        
+        print(f"GPU記憶體優化已啟用")
+    else:
+        raise RuntimeError("⚠️ GPU不可用，無法執行")
+    
     # 檢查記憶體（可選）
     try:
         import psutil
@@ -637,22 +715,32 @@ def main(args):
     # 創建數據集
     print("\n創建訓練數據集...")
     
-    # 檢查GPU設置
-    if torch.cuda.is_available():
-        print(f"✓ 使用GPU加速所有計算")
-        print(f"  GPU設備: {torch.cuda.get_device_name()}")
-        print(f"  GPU記憶體: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
-    else:
-        raise RuntimeError("⚠️ GPU不可用，無法執行")
-    
-    dataset = TravelRecommendDataset(
-        poi_processor, 
-        review_processor, 
-        negative_ratio=args.negative_ratio,
-        memory_efficient=memory_efficient,
-        max_samples_in_memory=args.max_samples_in_memory,
-        gpu_batch_size=args.gpu_batch_size
-    )
+    try:
+        dataset = TravelRecommendDataset(
+            poi_processor, 
+            review_processor, 
+            negative_ratio=args.negative_ratio,
+            memory_efficient=memory_efficient,
+            max_samples_in_memory=args.max_samples_in_memory,
+            gpu_batch_size=args.gpu_batch_size
+        )
+        
+        print(f"✓ 數據集創建成功")
+        
+    except torch.cuda.OutOfMemoryError as e:
+        print(f"❌ GPU記憶體不足: {e}")
+        print(f"建議解決方案:")
+        print(f"  1. 減少 --max-reviews 參數 (目前: {args.max_reviews})")
+        print(f"  2. 減小 --negative-ratio (目前: {args.negative_ratio})")
+        print(f"  3. 減小批次大小")
+        print(f"  4. 啟用 --memory-efficient")
+        return
+        
+    except Exception as e:
+        print(f"❌ 數據集創建失敗: {e}")
+        import traceback
+        traceback.print_exc()
+        return
     
     # 分割訓練/驗證集
     train_size = int(0.8 * len(dataset))
