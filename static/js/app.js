@@ -5,23 +5,39 @@ let map = null;
 let markers = [];
 let selectedCategories = [];
 let routeLine = null;
+let locationPickerMap = null;
+let startLocation = null;
+let endLocation = null;
+let isSelectingStart = false;
+let isSelectingEnd = false;
+let startMarker = null;
+let endMarker = null;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
     initCategorySelection();
     initTopKSlider();
+    initLocationPicker();
     initForm();
 });
 
 // 類別選擇
 function initCategorySelection() {
     const categoryChips = document.querySelectorAll('.category-chip');
+    console.log('初始化類別選擇，找到', categoryChips.length, '個類別');
     
     categoryChips.forEach(chip => {
-        chip.addEventListener('click', function() {
+        chip.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
             this.classList.toggle('active');
             updateSelectedCategories();
+            console.log('點擊類別:', chip.dataset.category, '當前選中:', selectedCategories);
         });
+        
+        // 確保可點擊樣式
+        chip.style.cursor = 'pointer';
+        chip.style.userSelect = 'none';
     });
 }
 
@@ -30,6 +46,129 @@ function updateSelectedCategories() {
     document.querySelectorAll('.category-chip.active').forEach(chip => {
         selectedCategories.push(chip.dataset.category);
     });
+}
+
+// 地點選擇器
+function initLocationPicker() {
+    // 初始化地圖（預設中心：舊金山）
+    locationPickerMap = L.map('locationPickerMap').setView([37.7749, -122.4194], 11);
+    
+    // 添加地圖圖層
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(locationPickerMap);
+    
+    // 設定出發點按鈕
+    document.getElementById('setStartBtn').addEventListener('click', function() {
+        isSelectingStart = true;
+        isSelectingEnd = false;
+        this.style.opacity = '1';
+        this.style.transform = 'scale(1.05)';
+        document.getElementById('setEndBtn').style.opacity = '0.7';
+        document.getElementById('setEndBtn').style.transform = 'scale(1)';
+        showToast('請在地圖上點擊選擇出發點', 'info');
+    });
+    
+    // 設定目的地按鈕
+    document.getElementById('setEndBtn').addEventListener('click', function() {
+        isSelectingEnd = true;
+        isSelectingStart = false;
+        this.style.opacity = '1';
+        this.style.transform = 'scale(1.05)';
+        document.getElementById('setStartBtn').style.opacity = '0.7';
+        document.getElementById('setStartBtn').style.transform = 'scale(1)';
+        showToast('請在地圖上點擊選擇目的地', 'info');
+    });
+    
+    // 地圖點擊事件
+    locationPickerMap.on('click', function(e) {
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+        
+        if (isSelectingStart) {
+            // 設定出發點
+            startLocation = [lat, lng];
+            document.getElementById('startLocation').value = `${lat},${lng}`;
+            document.getElementById('startLocationDisplay').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            
+            // 移除舊標記
+            if (startMarker) {
+                locationPickerMap.removeLayer(startMarker);
+            }
+            
+            // 添加新標記
+            startMarker = L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: '<div style="background: #10b981; color: white; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"><i class="fas fa-play"></i></div>',
+                    iconSize: [35, 35]
+                })
+            }).addTo(locationPickerMap);
+            startMarker.bindPopup('<b>出發點</b>').openPopup();
+            
+            isSelectingStart = false;
+            document.getElementById('setStartBtn').style.opacity = '0.7';
+            document.getElementById('setStartBtn').style.transform = 'scale(1)';
+            showToast('出發點已設定！', 'success');
+            
+        } else if (isSelectingEnd) {
+            // 設定目的地
+            endLocation = [lat, lng];
+            document.getElementById('endLocation').value = `${lat},${lng}`;
+            document.getElementById('endLocationDisplay').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            
+            // 移除舊標記
+            if (endMarker) {
+                locationPickerMap.removeLayer(endMarker);
+            }
+            
+            // 添加新標記
+            endMarker = L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: '<div style="background: #ef4444; color: white; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"><i class="fas fa-flag"></i></div>',
+                    iconSize: [35, 35]
+                })
+            }).addTo(locationPickerMap);
+            endMarker.bindPopup('<b>目的地</b>').openPopup();
+            
+            isSelectingEnd = false;
+            document.getElementById('setEndBtn').style.opacity = '0.7';
+            document.getElementById('setEndBtn').style.transform = 'scale(1)';
+            showToast('目的地已設定！', 'success');
+        }
+        
+        // 如果兩個點都設定了，調整視角
+        if (startLocation && endLocation) {
+            const bounds = L.latLngBounds([startLocation, endLocation]);
+            locationPickerMap.fitBounds(bounds, { padding: [50, 50] });
+        }
+    });
+}
+
+// 顯示提示訊息
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#2563eb'};
+        color: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+    `;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 // Top-K 滑桿
@@ -49,51 +188,29 @@ function initForm() {
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        const startLocation = document.getElementById('startLocation').value;
-        const endLocation = document.getElementById('endLocation').value;
-        const topK = parseInt(document.getElementById('topK').value);
-        const enableLLM = document.getElementById('enableLLM').checked;
-        
-        // 解析座標
-        const start = parseLocation(startLocation);
-        const end = parseLocation(endLocation);
-        
-        if (!start || !end) {
-            showError('請輸入有效的座標格式 (例如: 37.7749, -122.4194)');
+        // 驗證地點是否已選擇
+        if (!startLocation || !endLocation) {
+            showError('請先在地圖上選擇出發點和目的地！');
             return;
         }
         
+        const topK = parseInt(document.getElementById('topK').value);
+        const enableLLM = document.getElementById('enableLLM').checked;
+        
         // 準備請求數據
         const requestData = {
-            start_location: start,
-            end_location: end,
+            start_location: startLocation,
+            end_location: endLocation,
             categories: selectedCategories,
             top_k: topK,
             enable_llm: enableLLM
         };
         
+        console.log('提交推薦請求:', requestData);
+        
         // 發送請求
         await getRecommendations(requestData);
     });
-}
-
-// 解析地點輸入
-function parseLocation(locationStr) {
-    // 移除空白
-    locationStr = locationStr.trim();
-    
-    // 嘗試解析 "緯度, 經度" 格式
-    const parts = locationStr.split(',');
-    if (parts.length === 2) {
-        const lat = parseFloat(parts[0].trim());
-        const lon = parseFloat(parts[1].trim());
-        
-        if (!isNaN(lat) && !isNaN(lon)) {
-            return [lat, lon];
-        }
-    }
-    
-    return null;
 }
 
 // 獲取推薦

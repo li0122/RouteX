@@ -541,6 +541,82 @@ body {
     font-weight: 500;
 }
 
+/* 地點選擇器樣式 */
+.location-btn {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    opacity: 0.7;
+}
+
+.location-btn:hover {
+    opacity: 1;
+    transform: scale(1.02);
+}
+
+.location-btn:active {
+    transform: scale(0.98);
+}
+
+.location-display {
+    background: var(--light-color);
+    border-radius: 10px;
+    padding: 15px;
+    margin-top: 10px;
+}
+
+.location-item {
+    padding: 8px 0;
+    font-size: 0.95rem;
+    color: var(--dark-color);
+}
+
+.location-item strong {
+    display: inline-block;
+    width: 80px;
+    color: #4b5563;
+}
+
+/* Toast 動畫 */
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* 確保 category-chip 可點擊 */
+.category-chip {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    pointer-events: auto;
+}
+
 @media (max-width: 768px) {
     .stats-container {
         grid-template-columns: 1fr;

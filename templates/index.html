@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RouteX - 智能旅遊推薦系統</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/static/lib/fontawesome/all.min.css">
+    <link rel="stylesheet" href="/static/lib/leaflet/leaflet.css" />
 </head>
 <body>
     <div class="container">
@@ -59,35 +59,32 @@
                         </div>
                     </div>
 
-                    <!-- 出發地點 -->
+                    <!-- 地點選擇地圖 -->
                     <div class="form-group">
-                        <label for="startLocation">
-                            <i class="fas fa-map-marker-alt"></i> 出發地點
+                        <label>
+                            <i class="fas fa-map-marked-alt"></i> 在地圖上選擇地點
                         </label>
-                        <input 
-                            type="text" 
-                            id="startLocation" 
-                            class="form-control" 
-                            placeholder="例如: 37.7749, -122.4194 或 舊金山"
-                            required
-                        >
-                        <small style="color: #6b7280; margin-top: 5px; display: block;">
-                            格式: 緯度, 經度 或 地名
-                        </small>
-                    </div>
-
-                    <!-- 目的地 -->
-                    <div class="form-group">
-                        <label for="endLocation">
-                            <i class="fas fa-flag-checkered"></i> 目的地
-                        </label>
-                        <input 
-                            type="text" 
-                            id="endLocation" 
-                            class="form-control" 
-                            placeholder="例如: 37.8199, -122.4783 或 金門大橋"
-                            required
-                        >
+                        <div id="locationPickerMap" style="height: 300px; border-radius: 10px; overflow: hidden; margin-bottom: 15px;"></div>
+                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                            <button type="button" id="setStartBtn" class="location-btn" style="flex: 1; background: #10b981;">
+                                <i class="fas fa-map-marker-alt"></i> 設定出發點
+                            </button>
+                            <button type="button" id="setEndBtn" class="location-btn" style="flex: 1; background: #ef4444;">
+                                <i class="fas fa-flag-checkered"></i> 設定目的地
+                            </button>
+                        </div>
+                        <div class="location-display">
+                            <div class="location-item">
+                                <strong>🟢 出發點:</strong> 
+                                <span id="startLocationDisplay">請在地圖上點擊選擇</span>
+                            </div>
+                            <div class="location-item">
+                                <strong>🔴 目的地:</strong> 
+                                <span id="endLocationDisplay">請在地圖上點擊選擇</span>
+                            </div>
+                        </div>
+                        <input type="hidden" id="startLocation" required>
+                        <input type="hidden" id="endLocation" required>
                     </div>
 
                     <!-- 推薦數量 -->
@@ -186,7 +183,7 @@
     </div>
 
     <!-- Scripts -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/lib/leaflet/leaflet.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>
