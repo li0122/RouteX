@@ -54,12 +54,11 @@ def example_1_basic_usage():
     
     # 步驟3: 獲取推薦
     print(f"\n🎯 步驟3: 生成推薦")
-    recommendations = recommender.recommend(
-        user_id=user_id,
-        current_lat=current_lat,
-        current_lon=current_lon,
-        destination_lat=destination_lat,
-        destination_lon=destination_lon,
+    recommendations = recommender.recommend_on_route(
+        user_id=str(user_id),
+        user_history=[],
+        start_location=(current_lat, current_lon),
+        end_location=(destination_lat, destination_lon),
         top_k=top_k
     )
     
@@ -119,12 +118,11 @@ def example_2_with_llm_filter():
     
     # 步驟3: 獲取推薦（會自動使用LLM過濾）
     print(f"\n🎯 步驟3: 生成推薦（含LLM審核）")
-    recommendations = recommender.recommend(
-        user_id=user_id,
-        current_lat=current_lat,
-        current_lon=current_lon,
-        destination_lat=destination_lat,
-        destination_lon=destination_lon,
+    recommendations = recommender.recommend_on_route(
+        user_id=str(user_id),
+        user_history=[],
+        start_location=(current_lat, current_lon),
+        end_location=(destination_lat, destination_lon),
         top_k=top_k
     )
     
@@ -193,12 +191,11 @@ def example_3_batch_recommendations():
         print(f"\n{'─' * 50}")
         print(f"處理第 {i}/{len(user_requests)} 個請求: {request['name']}")
         
-        recommendations = recommender.recommend(
-            user_id=request['user_id'],
-            current_lat=request['current_lat'],
-            current_lon=request['current_lon'],
-            destination_lat=request['destination_lat'],
-            destination_lon=request['destination_lon'],
+        recommendations = recommender.recommend_on_route(
+            user_id=str(request['user_id']),
+            user_history=[],
+            start_location=(request['current_lat'], request['current_lon']),
+            end_location=(request['destination_lat'], request['destination_lon']),
             top_k=3
         )
         
@@ -252,14 +249,15 @@ def example_4_custom_user_profile():
     
     # 獲取推薦
     print("\n🎯 根據偏好生成推薦")
-    recommendations = recommender.recommend(
-        user_id=100,
-        current_lat=37.7749,
-        current_lon=-122.4194,
-        destination_lat=37.8199,
-        destination_lon=-122.4783,
-        top_k=5,
-        user_profile=user_profile
+    
+    # 注意：user_profile 需要透過 user_history 來建立
+    # 這裡我們使用空歷史，實際應用中應該提供真實歷史記錄
+    recommendations = recommender.recommend_on_route(
+        user_id='100',
+        user_history=[],  # 可以新增歷史POI資訊
+        start_location=(37.7749, -122.4194),
+        end_location=(37.8199, -122.4783),
+        top_k=5
     )
     
     # 顯示結果
@@ -289,12 +287,11 @@ def example_5_export_results():
     if LLM_FILTER_AVAILABLE:
         recommender.llm_filter = SimpleLLMFilter()
     
-    recommendations = recommender.recommend(
-        user_id=1,
-        current_lat=37.7749,
-        current_lon=-122.4194,
-        destination_lat=37.8199,
-        destination_lon=-122.4783,
+    recommendations = recommender.recommend_on_route(
+        user_id='1',
+        user_history=[],
+        start_location=(37.7749, -122.4194),
+        end_location=(37.8199, -122.4783),
         top_k=5
     )
     

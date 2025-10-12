@@ -36,12 +36,11 @@ def quick_start_without_llm():
     recommender.osrm_client = osrm_client
     
     # 2. 獲取推薦
-    recommendations = recommender.recommend(
-        user_id=1,
-        current_lat=37.7749,      # 舊金山
-        current_lon=-122.4194,
-        destination_lat=37.8199,   # 金門大橋
-        destination_lon=-122.4783,
+    recommendations = recommender.recommend_on_route(
+        user_id='1',
+        user_history=[],  # 空歷史
+        start_location=(37.7749, -122.4194),  # 舊金山
+        end_location=(37.8199, -122.4783),    # 金門大橋
         top_k=5
     )
     
@@ -92,12 +91,11 @@ def quick_start_with_llm():
         recommender.enable_llm_filter = False
     
     # 2. 獲取推薦（自動使用LLM過濾）
-    recommendations = recommender.recommend(
-        user_id=1,
-        current_lat=37.7749,
-        current_lon=-122.4194,
-        destination_lat=37.8199,
-        destination_lon=-122.4783,
+    recommendations = recommender.recommend_on_route(
+        user_id='1',
+        user_history=[],
+        start_location=(37.7749, -122.4194),
+        end_location=(37.8199, -122.4783),
         top_k=3
     )
     

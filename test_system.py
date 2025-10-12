@@ -61,12 +61,11 @@ def test_simple_recommendation(recommender):
     try:
         print("   正在生成推薦...")
         
-        recommendations = recommender.recommend(
-            user_id=1,
-            current_lat=37.7749,      # 舊金山
-            current_lon=-122.4194,
-            destination_lat=37.8199,   # 金門大橋
-            destination_lon=-122.4783,
+        recommendations = recommender.recommend_on_route(
+            user_id='1',
+            user_history=[],
+            start_location=(37.7749, -122.4194),  # 舊金山
+            end_location=(37.8199, -122.4783),    # 金門大橋
             top_k=3
         )
         
