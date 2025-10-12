@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RouteX API 測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2563eb; }
+        h2 { color: #1f2937; }
+        button {
+            background: #2563eb;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #1d4ed8; }
+        .result {
+            background: #f9fafb;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+    </style>
+</head>
+<body>
+    <h1>🚀 RouteX API 測試頁面</h1>
+    
+    <div class="test-section">
+        <h2>1. 系統狀態測試</h2>
+        <button onclick="testStatus()">測試 /api/status</button>
+        <div id="statusResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 類別列表測試</h2>
+        <button onclick="testCategories()">測試 /api/categories</button>
+        <div id="categoriesResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. 推薦API測試</h2>
+        <button onclick="testRecommend(false)">測試推薦（無LLM）</button>
+        <button onclick="testRecommend(true)">測試推薦（有LLM）</button>
+        <div id="recommendResult" class="result"></div>
+    </div>
+
+    <script>
+        async function testStatus() {
+            const result = document.getElementById('statusResult');
+            result.textContent = '測試中...';
+            
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                result.innerHTML = `<span class="success">✅ 成功</span>\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ 失敗</span>\n${error.message}`;
+            }
+        }
+        
+        async function testCategories() {
+            const result = document.getElementById('categoriesResult');
+            result.textContent = '測試中...';
+            
+            try {
+                const response = await fetch('/api/categories');
+                const data = await response.json();
+                result.innerHTML = `<span class="success">✅ 成功</span>\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ 失敗</span>\n${error.message}`;
+            }
+        }
+        
+        async function testRecommend(enableLLM) {
+            const result = document.getElementById('recommendResult');
+            result.textContent = `測試中 (LLM: ${enableLLM ? '啟用' : '禁用'})...`;
+            
+            const requestData = {
+                start_location: [37.7749, -122.4194],  // 舊金山
+                end_location: [37.8199, -122.4783],    // 金門大橋
+                categories: ["Restaurant", "Cafe"],
+                top_k: 3,
+                enable_llm: enableLLM
+            };
+            
+            try {
+                const response = await fetch('/api/recommend', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    result.innerHTML = `<span class="success">✅ 成功</span>\n獲得 ${data.count} 個推薦\n\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    result.innerHTML = `<span class="error">❌ 失敗</span>\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ 失敗</span>\n${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

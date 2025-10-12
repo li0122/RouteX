@@ -1,0 +1,14 @@
+# RouteX Web Application Requirements
+
+# Flask和Web相關
+Flask>=2.3.0
+flask-cors>=4.0.0
+
+# 已有的依賴（從原requirements.txt）
+torch>=2.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+requests>=2.31.0
+
+# 可選但推薦
+gunicorn>=21.2.0  # 用於生產環境部署

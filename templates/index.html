@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RouteX - 智能旅遊推薦系統</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1><i class="fas fa-route"></i> RouteX</h1>
+            <p>AI驅動的智能旅遊推薦系統 - 讓您的旅程更精彩</p>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Input Panel -->
+            <div class="input-panel">
+                <h2 class="section-title">
+                    <i class="fas fa-sliders-h"></i>
+                    設定您的旅程
+                </h2>
+
+                <form id="recommendForm">
+                    <!-- 偏好類別 -->
+                    <div class="form-group">
+                        <label>
+                            <i class="fas fa-heart"></i> 偏好類別 (可多選)
+                        </label>
+                        <div class="category-grid">
+                            <div class="category-chip" data-category="Restaurant">
+                                <i class="fas fa-utensils"></i> 餐廳
+                            </div>
+                            <div class="category-chip" data-category="Cafe">
+                                <i class="fas fa-coffee"></i> 咖啡廳
+                            </div>
+                            <div class="category-chip" data-category="Museum">
+                                <i class="fas fa-landmark"></i> 博物館
+                            </div>
+                            <div class="category-chip" data-category="Park">
+                                <i class="fas fa-tree"></i> 公園
+                            </div>
+                            <div class="category-chip" data-category="Shopping">
+                                <i class="fas fa-shopping-bag"></i> 購物
+                            </div>
+                            <div class="category-chip" data-category="Tourist Attraction">
+                                <i class="fas fa-camera"></i> 景點
+                            </div>
+                            <div class="category-chip" data-category="Bar">
+                                <i class="fas fa-glass-martini"></i> 酒吧
+                            </div>
+                            <div class="category-chip" data-category="Entertainment">
+                                <i class="fas fa-film"></i> 娛樂
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 出發地點 -->
+                    <div class="form-group">
+                        <label for="startLocation">
+                            <i class="fas fa-map-marker-alt"></i> 出發地點
+                        </label>
+                        <input 
+                            type="text" 
+                            id="startLocation" 
+                            class="form-control" 
+                            placeholder="例如: 37.7749, -122.4194 或 舊金山"
+                            required
+                        >
+                        <small style="color: #6b7280; margin-top: 5px; display: block;">
+                            格式: 緯度, 經度 或 地名
+                        </small>
+                    </div>
+
+                    <!-- 目的地 -->
+                    <div class="form-group">
+                        <label for="endLocation">
+                            <i class="fas fa-flag-checkered"></i> 目的地
+                        </label>
+                        <input 
+                            type="text" 
+                            id="endLocation" 
+                            class="form-control" 
+                            placeholder="例如: 37.8199, -122.4783 或 金門大橋"
+                            required
+                        >
+                    </div>
+
+                    <!-- 推薦數量 -->
+                    <div class="form-group">
+                        <label for="topK">
+                            <i class="fas fa-list-ol"></i> 推薦數量: <span id="topKValue">5</span>
+                        </label>
+                        <input 
+                            type="range" 
+                            id="topK" 
+                            class="form-control" 
+                            min="3" 
+                            max="10" 
+                            value="5"
+                            style="cursor: pointer;"
+                        >
+                    </div>
+
+                    <!-- LLM過濾開關 -->
+                    <div class="settings-toggle">
+                        <label class="toggle-switch">
+                            <span>
+                                <i class="fas fa-robot"></i> 啟用AI智能過濾
+                            </span>
+                            <input type="checkbox" id="enableLLM" checked>
+                        </label>
+                        <small style="color: #6b7280; margin-top: 8px; display: block;">
+                            過濾不適合旅客的地點（如倉儲、維修店等）
+                        </small>
+                    </div>
+
+                    <!-- 提交按鈕 -->
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <i class="fas fa-search"></i>
+                        開始推薦
+                    </button>
+                </form>
+            </div>
+
+            <!-- Results Panel -->
+            <div class="results-panel">
+                <h2 class="section-title">
+                    <i class="fas fa-star"></i>
+                    推薦結果
+                </h2>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="empty-state">
+                    <i class="fas fa-map-marked-alt"></i>
+                    <h3>等待您的探索</h3>
+                    <p>請設定您的旅程資訊，我們將為您推薦最佳景點</p>
+                </div>
+
+                <!-- Loading State -->
+                <div id="loadingState" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <h3>正在尋找最佳推薦...</h3>
+                    <p>AI正在分析您的路線和偏好</p>
+                </div>
+
+                <!-- Error State -->
+                <div id="errorState" class="error-state" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>發生錯誤</h3>
+                    <p id="errorMessage"></p>
+                </div>
+
+                <!-- Results Container -->
+                <div id="resultsContainer" style="display: none;">
+                    <!-- Statistics -->
+                    <div class="stats-container">
+                        <div class="stat-card">
+                            <div class="stat-value" id="statTotal">0</div>
+                            <div class="stat-label">推薦景點</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statAvgScore">0.0</div>
+                            <div class="stat-label">平均評分</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statExtraTime">0</div>
+                            <div class="stat-label">額外時間(分)</div>
+                        </div>
+                    </div>
+
+                    <!-- Map -->
+                    <div class="map-container">
+                        <div id="map"></div>
+                    </div>
+
+                    <!-- Recommendations -->
+                    <div id="recommendationsList" class="recommendations-grid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
