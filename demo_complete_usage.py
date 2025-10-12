@@ -5,9 +5,13 @@
 
 import torch
 import json
-from route_aware_recommender import RouteAwareRecommender
-from dlrm_model import TravelDLRM, create_travel_dlrm
-from data_processor import POIDataProcessor
+from route_aware_recommender import create_route_recommender, OSRMClient
+
+try:
+    from simple_llm_filter import SimpleLLMFilter
+    LLM_FILTER_AVAILABLE = True
+except ImportError:
+    LLM_FILTER_AVAILABLE = False
 
 
 def example_1_basic_usage():
@@ -19,12 +23,19 @@ def example_1_basic_usage():
     
     # 步驟1: 初始化推薦器
     print("\n🔧 步驟1: 初始化推薦器")
-    recommender = RouteAwareRecommender(
-        model_path='models/travel_dlrm.pth',
-        osrm_host='router.project-osrm.org',  # 使用公開OSRM服務器
-        osrm_port=80,
-        enable_llm_filter=False  # 不使用LLM過濾
+    
+    osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
+    
+    recommender = create_route_recommender(
+        poi_data_path='datasets/meta-California.json.gz',
+        model_checkpoint='models/travel_dlrm.pth',
+        device='cuda' if torch.cuda.is_available() else 'cpu',
+        enable_spatial_index=True,
+        enable_async=True
     )
+    recommender.osrm_client = osrm_client
+    recommender.enable_llm_filter = False
+    
     print("✅ 推薦器初始化完成")
     
     # 步驟2: 設定用戶資訊和目標位置
@@ -68,12 +79,28 @@ def example_2_with_llm_filter():
     
     # 步驟1: 初始化推薦器（啟用LLM）
     print("\n🔧 步驟1: 初始化推薦器（啟用LLM過濾）")
-    recommender = RouteAwareRecommender(
-        model_path='models/travel_dlrm.pth',
-        osrm_host='router.project-osrm.org',  # 使用公開OSRM服務器
-        osrm_port=80,
-        enable_llm_filter=True  # 🔑 啟用LLM過濾
+    
+    osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
+    
+    recommender = create_route_recommender(
+        poi_data_path='datasets/meta-California.json.gz',
+        model_checkpoint='models/travel_dlrm.pth',
+        device='cuda' if torch.cuda.is_available() else 'cpu',
+        enable_spatial_index=True,
+        enable_async=True
     )
+    recommender.osrm_client = osrm_client
+    
+    # 啟用LLM過濾
+    recommender.enable_llm_filter = True
+    if LLM_FILTER_AVAILABLE:
+        try:
+            recommender.llm_filter = SimpleLLMFilter()
+            print(f"✅ LLM過濾器已啟用")
+        except Exception as e:
+            print(f"⚠️ LLM啟用失敗: {e}")
+            recommender.enable_llm_filter = False
+    
     print("✅ 推薦器初始化完成")
     print(f"   LLM端點: {recommender.llm_filter.base_url if recommender.llm_filter else '未設置'}")
     
@@ -117,12 +144,18 @@ def example_3_batch_recommendations():
     
     # 初始化推薦器
     print("\n🔧 初始化推薦器")
-    recommender = RouteAwareRecommender(
-        model_path='models/travel_dlrm.pth',
-        osrm_host='router.project-osrm.org',
-        osrm_port=80,
-        enable_llm_filter=True
+    
+    osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
+    
+    recommender = create_route_recommender(
+        poi_data_path='datasets/meta-California.json.gz',
+        model_checkpoint='models/travel_dlrm.pth',
+        device='cuda' if torch.cuda.is_available() else 'cpu'
     )
+    recommender.osrm_client = osrm_client
+    recommender.enable_llm_filter = True
+    if LLM_FILTER_AVAILABLE:
+        recommender.llm_filter = SimpleLLMFilter()
     
     # 定義多個用戶的推薦請求
     user_requests = [
@@ -192,12 +225,17 @@ def example_4_custom_user_profile():
     print("=" * 60)
     
     # 初始化
-    recommender = RouteAwareRecommender(
-        model_path='models/travel_dlrm.pth',
-        osrm_host='router.project-osrm.org',
-        osrm_port=80,
-        enable_llm_filter=True
+    osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
+    
+    recommender = create_route_recommender(
+        poi_data_path='datasets/meta-California.json.gz',
+        model_checkpoint='models/travel_dlrm.pth',
+        device='cuda' if torch.cuda.is_available() else 'cpu'
     )
+    recommender.osrm_client = osrm_client
+    recommender.enable_llm_filter = True
+    if LLM_FILTER_AVAILABLE:
+        recommender.llm_filter = SimpleLLMFilter()
     
     # 定義用戶偏好
     user_profile = {
@@ -239,12 +277,17 @@ def example_5_export_results():
     print("=" * 60)
     
     # 獲取推薦
-    recommender = RouteAwareRecommender(
-        model_path='models/travel_dlrm.pth',
-        osrm_host='router.project-osrm.org',
-        osrm_port=80,
-        enable_llm_filter=True
+    osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
+    
+    recommender = create_route_recommender(
+        poi_data_path='datasets/meta-California.json.gz',
+        model_checkpoint='models/travel_dlrm.pth',
+        device='cuda' if torch.cuda.is_available() else 'cpu'
     )
+    recommender.osrm_client = osrm_client
+    recommender.enable_llm_filter = True
+    if LLM_FILTER_AVAILABLE:
+        recommender.llm_filter = SimpleLLMFilter()
     
     recommendations = recommender.recommend(
         user_id=1,

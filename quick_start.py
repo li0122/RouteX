@@ -3,7 +3,13 @@
 最簡單的使用方式
 """
 
-from route_aware_recommender import RouteAwareRecommender
+import torch
+
+try:
+    from simple_llm_filter import SimpleLLMFilter
+    LLM_FILTER_AVAILABLE = True
+except ImportError:
+    LLM_FILTER_AVAILABLE = False
 
 
 def quick_start_without_llm():
@@ -13,12 +19,21 @@ def quick_start_without_llm():
     print("=" * 50)
     
     # 1. 初始化推薦器
-    recommender = RouteAwareRecommender(
-        model_path='models/travel_dlrm.pth',
-        osrm_host='router.project-osrm.org',  # 使用公開OSRM服務器
-        osrm_port=80,
-        enable_llm_filter=False  # 不使用LLM
+    from route_aware_recommender import create_route_recommender, OSRMClient
+    
+    # 創建OSRM客戶端（使用公開OSRM服務器）
+    osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
+    
+    recommender = create_route_recommender(
+        poi_data_path='datasets/meta-California.json.gz',
+        model_checkpoint='models/travel_dlrm.pth',
+        device='cuda' if __import__('torch').cuda.is_available() else 'cpu',
+        enable_spatial_index=True,
+        enable_async=True
     )
+    
+    # 設置OSRM客戶端
+    recommender.osrm_client = osrm_client
     
     # 2. 獲取推薦
     recommendations = recommender.recommend(
@@ -46,12 +61,35 @@ def quick_start_with_llm():
     print("=" * 50)
     
     # 1. 初始化推薦器（啟用LLM）
-    recommender = RouteAwareRecommender(
-        model_path='models/travel_dlrm.pth',
-        osrm_host='router.project-osrm.org',  # 使用公開OSRM服務器
-        osrm_port=80,
-        enable_llm_filter=True  # 🔑 啟用LLM過濾
+    from route_aware_recommender import create_route_recommender, OSRMClient
+    
+    # 創建OSRM客戶端
+    osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
+    
+    recommender = create_route_recommender(
+        poi_data_path='datasets/meta-California.json.gz',
+        model_checkpoint='models/travel_dlrm.pth',
+        device='cuda' if __import__('torch').cuda.is_available() else 'cpu',
+        enable_spatial_index=True,
+        enable_async=True
     )
+    
+    # 設置OSRM客戶端
+    recommender.osrm_client = osrm_client
+    
+    # 🔑 啟用LLM過濾
+    recommender.enable_llm_filter = True
+    if LLM_FILTER_AVAILABLE:
+        try:
+            from simple_llm_filter import SimpleLLMFilter
+            recommender.llm_filter = SimpleLLMFilter()
+            print("✅ LLM過濾器已啟用")
+        except Exception as e:
+            print(f"⚠️ LLM過濾器啟用失敗: {e}")
+            recommender.enable_llm_filter = False
+    else:
+        print("⚠️ LLM過濾器不可用")
+        recommender.enable_llm_filter = False
     
     # 2. 獲取推薦（自動使用LLM過濾）
     recommendations = recommender.recommend(
