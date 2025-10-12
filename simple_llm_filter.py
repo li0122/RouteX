@@ -133,69 +133,43 @@ class SimpleLLMFilter:
         print(f"🎯 開始逐一LLM審核流程")
         print(f"   目標: TOP {target_k} 推薦")
         print(f"   輸入: {len(ranked_pois)} 個排序POI")
+        print(f"   審核範圍: 全部 {len(ranked_pois)} 個候選（不早停）")
         
         approved_pois = []
         search_limit = min(len(ranked_pois), target_k * multiplier)
         
-        print(f"   初始搜索範圍: 前 {search_limit} 名")
         print()
         
-        # 從第1名開始逐一審核
-        for rank, poi in enumerate(ranked_pois[:search_limit], 1):
+        # 從第1名開始逐一審核 - 不早停，審核完所有候選
+        for rank, poi in enumerate(ranked_pois, 1):
             poi_name = poi.get('name', '未知POI')
             poi_category = poi.get('primary_category', '未分類')
             rating = poi.get('avg_rating', 0)
             
-            print(f"🔍 審核第 {rank} 名: {poi_name}")
+            print(f"🔍 審核第 {rank}/{len(ranked_pois)} 名: {poi_name}")
             print(f"   類別: {poi_category} | 評分: {rating:.1f}⭐")
             
             # LLM審核
             if self.is_travel_relevant(poi):
                 approved_pois.append(poi)
-                print(f"   ✅ 通過審核! (已收集 {len(approved_pois)}/{target_k})")
-                
-                # 達到目標數量就停止
-                if len(approved_pois) >= target_k:
-                    print(f"🎉 已收集到 {target_k} 個通過審核的POI!")
-                    break
+                print(f"   ✅ 通過審核! (已收集 {len(approved_pois)} 個)")
             else:
                 print(f"   ❌ 審核未通過 (不適合旅客)")
             
             print()
             
             # 控制請求頻率
-            if rank < search_limit:
-                time.sleep(self.delay_between_requests)
-        
-        # 如果還沒達到目標數量，繼續搜索剩餘POI
-        if len(approved_pois) < target_k and search_limit < len(ranked_pois):
-            print(f"⚡ 需要更多POI，繼續搜索...")
-            remaining_pois = ranked_pois[search_limit:]
-            
-            for rank, poi in enumerate(remaining_pois, search_limit + 1):
-                if len(approved_pois) >= target_k:
-                    break
-                    
-                poi_name = poi.get('name', '未知POI')
-                print(f"🔍 額外審核第 {rank} 名: {poi_name}")
-                
-                if self.is_travel_relevant(poi):
-                    approved_pois.append(poi)
-                    print(f"   ✅ 通過! (已收集 {len(approved_pois)}/{target_k})")
-                
+            if rank < len(ranked_pois):
                 time.sleep(self.delay_between_requests)
         
         # 最終結果
         final_count = len(approved_pois)
         print(f"\n🏆 最終結果:")
+        print(f"   審核完成: {len(ranked_pois)} 個POI")
         print(f"   通過審核: {final_count} 個POI")
-        print(f"   完成度: {final_count}/{target_k} ({final_count/target_k*100:.1f}%)")
+        print(f"   返回前 {target_k} 名")
         
-        if final_count < target_k:
-            shortage = target_k - final_count
-            print(f"   ⚠️ 還差 {shortage} 個POI達到目標")
-            print(f"   建議：放寬搜索範圍或調整過濾標準")
-        
+        # 返回前K個通過審核的POI
         return approved_pois[:target_k]
     
     def _build_travel_relevance_prompt(self, poi: Dict[str, Any]) -> str:
