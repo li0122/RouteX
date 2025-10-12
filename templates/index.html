@@ -6,7 +6,6 @@
     <title>RouteX - 智能旅遊推薦系統</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="/static/lib/fontawesome/all.min.css">
-    <link rel="stylesheet" href="/static/lib/leaflet/leaflet.css" />
 </head>
 <body>
     <div class="container">
@@ -62,9 +61,9 @@
                     <!-- 地點選擇地圖 -->
                     <div class="form-group">
                         <label>
-                            <i class="fas fa-map-marked-alt"></i> 在地圖上選擇地點
+                            <i class="fas fa-map-marked-alt"></i> 在地圖上選擇地點 (舊金山灣區)
                         </label>
-                        <div id="locationPickerMap" style="height: 300px; border-radius: 10px; overflow: hidden; margin-bottom: 15px;"></div>
+                        <div id="locationPickerMap" style="margin-bottom: 15px;"></div>
                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                             <button type="button" id="setStartBtn" class="location-btn" style="flex: 1; background: #10b981;">
                                 <i class="fas fa-map-marker-alt"></i> 設定出發點
@@ -83,6 +82,9 @@
                                 <span id="endLocationDisplay">請在地圖上點擊選擇</span>
                             </div>
                         </div>
+                        <small style="color: #6b7280; margin-top: 10px; display: block;">
+                            💡 提示：地圖顯示舊金山灣區，包含市中心、金門大橋等地標
+                        </small>
                         <input type="hidden" id="startLocation" required>
                         <input type="hidden" id="endLocation" required>
                     </div>
@@ -183,7 +185,8 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/static/lib/leaflet/leaflet.js"></script>
+    <script src="/static/js/offline-map-picker.js"></script>
+    <script src="/static/js/offline-result-map.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -5,19 +5,15 @@ let map = null;
 let markers = [];
 let selectedCategories = [];
 let routeLine = null;
-let locationPickerMap = null;
+let offlineMapPicker = null;
 let startLocation = null;
 let endLocation = null;
-let isSelectingStart = false;
-let isSelectingEnd = false;
-let startMarker = null;
-let endMarker = null;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
     initCategorySelection();
     initTopKSlider();
-    initLocationPicker();
+    initOfflineMapPicker();
     initForm();
 });
 
@@ -48,20 +44,36 @@ function updateSelectedCategories() {
     });
 }
 
-// 地點選擇器
-function initLocationPicker() {
-    // 初始化地圖（預設中心：舊金山）
-    locationPickerMap = L.map('locationPickerMap').setView([37.7749, -122.4194], 11);
-    
-    // 添加地圖圖層
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(locationPickerMap);
+// 離線地圖選擇器
+function initOfflineMapPicker() {
+    offlineMapPicker = new OfflineMapPicker('locationPickerMap', {
+        bounds: {
+            minLat: 37.6,
+            maxLat: 37.9,
+            minLng: -122.6,
+            maxLng: -122.2
+        },
+        onStartSelect: (lat, lng) => {
+            startLocation = [lat, lng];
+            document.getElementById('startLocation').value = `${lat},${lng}`;
+            document.getElementById('startLocationDisplay').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            document.getElementById('setStartBtn').style.opacity = '0.7';
+            document.getElementById('setStartBtn').style.transform = 'scale(1)';
+            showToast('出發點已設定！', 'success');
+        },
+        onEndSelect: (lat, lng) => {
+            endLocation = [lat, lng];
+            document.getElementById('endLocation').value = `${lat},${lng}`;
+            document.getElementById('endLocationDisplay').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            document.getElementById('setEndBtn').style.opacity = '0.7';
+            document.getElementById('setEndBtn').style.transform = 'scale(1)';
+            showToast('目的地已設定！', 'success');
+        }
+    });
     
     // 設定出發點按鈕
     document.getElementById('setStartBtn').addEventListener('click', function() {
-        isSelectingStart = true;
-        isSelectingEnd = false;
+        offlineMapPicker.setSelectingStart(true);
         this.style.opacity = '1';
         this.style.transform = 'scale(1.05)';
         document.getElementById('setEndBtn').style.opacity = '0.7';
@@ -71,78 +83,12 @@ function initLocationPicker() {
     
     // 設定目的地按鈕
     document.getElementById('setEndBtn').addEventListener('click', function() {
-        isSelectingEnd = true;
-        isSelectingStart = false;
+        offlineMapPicker.setSelectingEnd(true);
         this.style.opacity = '1';
         this.style.transform = 'scale(1.05)';
         document.getElementById('setStartBtn').style.opacity = '0.7';
         document.getElementById('setStartBtn').style.transform = 'scale(1)';
         showToast('請在地圖上點擊選擇目的地', 'info');
-    });
-    
-    // 地圖點擊事件
-    locationPickerMap.on('click', function(e) {
-        const lat = e.latlng.lat;
-        const lng = e.latlng.lng;
-        
-        if (isSelectingStart) {
-            // 設定出發點
-            startLocation = [lat, lng];
-            document.getElementById('startLocation').value = `${lat},${lng}`;
-            document.getElementById('startLocationDisplay').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            
-            // 移除舊標記
-            if (startMarker) {
-                locationPickerMap.removeLayer(startMarker);
-            }
-            
-            // 添加新標記
-            startMarker = L.marker([lat, lng], {
-                icon: L.divIcon({
-                    className: 'custom-marker',
-                    html: '<div style="background: #10b981; color: white; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"><i class="fas fa-play"></i></div>',
-                    iconSize: [35, 35]
-                })
-            }).addTo(locationPickerMap);
-            startMarker.bindPopup('<b>出發點</b>').openPopup();
-            
-            isSelectingStart = false;
-            document.getElementById('setStartBtn').style.opacity = '0.7';
-            document.getElementById('setStartBtn').style.transform = 'scale(1)';
-            showToast('出發點已設定！', 'success');
-            
-        } else if (isSelectingEnd) {
-            // 設定目的地
-            endLocation = [lat, lng];
-            document.getElementById('endLocation').value = `${lat},${lng}`;
-            document.getElementById('endLocationDisplay').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            
-            // 移除舊標記
-            if (endMarker) {
-                locationPickerMap.removeLayer(endMarker);
-            }
-            
-            // 添加新標記
-            endMarker = L.marker([lat, lng], {
-                icon: L.divIcon({
-                    className: 'custom-marker',
-                    html: '<div style="background: #ef4444; color: white; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"><i class="fas fa-flag"></i></div>',
-                    iconSize: [35, 35]
-                })
-            }).addTo(locationPickerMap);
-            endMarker.bindPopup('<b>目的地</b>').openPopup();
-            
-            isSelectingEnd = false;
-            document.getElementById('setEndBtn').style.opacity = '0.7';
-            document.getElementById('setEndBtn').style.transform = 'scale(1)';
-            showToast('目的地已設定！', 'success');
-        }
-        
-        // 如果兩個點都設定了，調整視角
-        if (startLocation && endLocation) {
-            const bounds = L.latLngBounds([startLocation, endLocation]);
-            locationPickerMap.fitBounds(bounds, { padding: [50, 50] });
-        }
     });
 }
 
@@ -309,95 +255,13 @@ function updateStatistics(data) {
 
 // 初始化地圖
 function initMap(data) {
-    const mapDiv = document.getElementById('map');
-    
-    // 如果地圖已存在，先清除
-    if (map) {
-        map.remove();
+    // 創建離線結果地圖
+    if (!map) {
+        map = new OfflineResultMap('map');
     }
     
-    // 創建新地圖
-    const start = data.start_location;
-    const end = data.end_location;
-    const center = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
-    
-    map = L.map('map').setView(center, 12);
-    
-    // 添加地圖圖層
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
-    
-    // 清除舊標記
-    markers = [];
-    
-    // 添加起點標記
-    const startMarker = L.marker(start, {
-        icon: L.divIcon({
-            className: 'custom-marker',
-            html: '<div style="background: #10b981; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"><i class="fas fa-play"></i></div>',
-            iconSize: [40, 40]
-        })
-    }).addTo(map);
-    startMarker.bindPopup('<b>出發點</b>');
-    markers.push(startMarker);
-    
-    // 添加終點標記
-    const endMarker = L.marker(end, {
-        icon: L.divIcon({
-            className: 'custom-marker',
-            html: '<div style="background: #ef4444; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"><i class="fas fa-flag"></i></div>',
-            iconSize: [40, 40]
-        })
-    }).addTo(map);
-    endMarker.bindPopup('<b>目的地</b>');
-    markers.push(endMarker);
-    
-    // 添加推薦點標記
-    data.recommendations.forEach((rec, index) => {
-        const poi = rec.poi;
-        const marker = L.marker([poi.latitude, poi.longitude], {
-            icon: L.divIcon({
-                className: 'custom-marker',
-                html: `<div style="background: #2563eb; color: white; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">${index + 1}</div>`,
-                iconSize: [35, 35]
-            })
-        }).addTo(map);
-        
-        marker.bindPopup(`
-            <div style="min-width: 200px;">
-                <h4 style="margin: 0 0 10px 0; color: #2563eb;">${poi.name}</h4>
-                <p style="margin: 5px 0;"><strong>類別:</strong> ${poi.primary_category || '未分類'}</p>
-                <p style="margin: 5px 0;"><strong>評分:</strong> ${poi.avg_rating ? poi.avg_rating.toFixed(1) : 'N/A'} ⭐</p>
-                <p style="margin: 5px 0;"><strong>AI評分:</strong> ${rec.score.toFixed(3)}</p>
-                <p style="margin: 5px 0;"><strong>額外時間:</strong> ${rec.extra_time_minutes ? rec.extra_time_minutes.toFixed(1) : 'N/A'} 分鐘</p>
-            </div>
-        `);
-        
-        markers.push(marker);
-    });
-    
-    // 畫路線
-    if (routeLine) {
-        map.removeLayer(routeLine);
-    }
-    
-    const routePoints = [start];
-    data.recommendations.forEach(rec => {
-        routePoints.push([rec.poi.latitude, rec.poi.longitude]);
-    });
-    routePoints.push(end);
-    
-    routeLine = L.polyline(routePoints, {
-        color: '#2563eb',
-        weight: 3,
-        opacity: 0.7,
-        dashArray: '10, 10'
-    }).addTo(map);
-    
-    // 調整視角以顯示所有標記
-    const bounds = L.latLngBounds(routePoints);
-    map.fitBounds(bounds, { padding: [50, 50] });
+    // 設置數據並繪製
+    map.setData(data.start_location, data.end_location, data.recommendations);
 }
 
 // 顯示推薦列表
@@ -478,14 +342,6 @@ function createRecommendationCard(rec, rank) {
             </div>
         </div>
     `;
-    
-    // 點擊卡片時在地圖上高亮顯示
-    card.addEventListener('click', function() {
-        if (markers[rank + 1]) {  // +1 因為前兩個是起點和終點
-            markers[rank + 1].openPopup();
-            map.setView([poi.latitude, poi.longitude], 15);
-        }
-    });
     
     return card;
 }
