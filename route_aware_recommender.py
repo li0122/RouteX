@@ -924,12 +924,12 @@ class RouteAwareRecommender:
         if self.enable_async:
             return asyncio.run(self._async_route_recommendation(
                 user_profile, filtered_pois, start_location, end_location,
-                top_k, max_detour_ratio, max_extra_duration, start_time
+                top_k, max_detour_ratio, max_extra_duration, start_time, user_history
             ))
         else:
             return self._sync_route_recommendation(
                 user_profile, filtered_pois, start_location, end_location,
-                top_k, max_detour_ratio, max_extra_duration, start_time
+                top_k, max_detour_ratio, max_extra_duration, start_time, user_history
             )
     
     def _spatial_search_candidates(
@@ -1104,7 +1104,8 @@ class RouteAwareRecommender:
         top_k: int,
         max_detour_ratio: float,
         max_extra_duration: float,
-        start_time: float
+        start_time: float,
+        user_history: List[Dict] = None
     ) -> List[Dict]:
         """異步路線推薦流程"""
         
@@ -1152,7 +1153,7 @@ class RouteAwareRecommender:
         
         # 生成推薦結果
         recommendations = self._generate_recommendations(
-            valid_pois, scores, valid_detours, top_k, user_profile
+            valid_pois, scores, valid_detours, top_k, user_profile, user_history
         )
         
         # 更新性能統計
@@ -1173,7 +1174,8 @@ class RouteAwareRecommender:
         top_k: int,
         max_detour_ratio: float,
         max_extra_duration: float,
-        start_time: float
+        start_time: float,
+        user_history: List[Dict] = None
     ) -> List[Dict]:
         """同步路線推薦流程 (回退模式) - 優化版"""
         
@@ -1254,7 +1256,7 @@ class RouteAwareRecommender:
         
         # 生成推薦結果
         recommendations = self._generate_recommendations(
-            valid_pois, scores, valid_detours, top_k, user_profile
+            valid_pois, scores, valid_detours, top_k, user_profile, user_history
         )
         
         # 更新性能統計
@@ -1319,7 +1321,7 @@ class RouteAwareRecommender:
         
         # 生成推薦結果
         recommendations = self._generate_recommendations(
-            selected_pois, scores, mock_detours, top_k, {'preferred_categories': []}
+            selected_pois, scores, mock_detours, top_k, {'preferred_categories': []}, None
         )
         
         print(f"   備用策略生成 {len(recommendations)} 個推薦")
@@ -1345,7 +1347,8 @@ class RouteAwareRecommender:
         scores: List[float],
         detours: List[Dict],
         top_k: int,
-        user_profile: Dict = None
+        user_profile: Dict = None,
+        user_history: List[Dict] = None
     ) -> List[Dict]:
         """生成推薦結果 - 包含LLM審核"""
         
@@ -1371,6 +1374,18 @@ class RouteAwareRecommender:
             print(f"   目標: TOP {top_k} 旅遊推薦")
             print(f"   候選: {len(recommendations)} 個排序結果")
             
+            # 提取用戶偏好類別
+            user_categories = []
+            if user_history:
+                user_categories = list(set([
+                    item.get('category') 
+                    for item in user_history 
+                    if item.get('category')
+                ]))
+            
+            if user_categories:
+                print(f"   用戶偏好類別: {', '.join(user_categories)}")
+            
             # 提取POI用於LLM審核
             ranked_pois = [rec['poi'] for rec in recommendations]
             
@@ -1378,7 +1393,8 @@ class RouteAwareRecommender:
             approved_pois = self.llm_filter.sequential_llm_filter_top_k(
                 ranked_pois, 
                 target_k=top_k,
-                multiplier=3  # 搜索前 top_k * 3 個候選
+                multiplier=3,  # 搜索前 top_k * 3 個候選
+                user_categories=user_categories if user_categories else None
             )
             
             # 重新構建推薦結果（保持原始分數和詳細資訊）
@@ -1515,16 +1531,16 @@ class RouteAwareRecommender:
         if poi_category in user_categories:
             category_rank = user_categories.index(poi_category) + 1
             if category_rank == 1:
-                priority_reasons.append(f"💖 完美符合您的最愛類型 ({poi_category})")
+                priority_reasons.append(f"完美符合您的最愛類型 ({poi_category})")
             elif category_rank <= 3:
-                priority_reasons.append(f"💡 符合您的偏好 ({poi_category}，排名第{category_rank})")
+                priority_reasons.append(f"符合您的偏好 ({poi_category}，排名第{category_rank})")
         
         # 2. 質量與可信度
         rating = poi.get('avg_rating', 0)
         num_reviews = poi.get('num_reviews', 0)
         
         if rating >= 4.8 and num_reviews >= 50:
-            priority_reasons.append(f"� 頂級評分景點 ({rating:.1f}⭐，{num_reviews}+ 評論)")
+            priority_reasons.append(f"頂級評分景點 ({rating:.1f}⭐，{num_reviews}+ 評論)")
         elif rating >= 4.5 and num_reviews >= 20:
             reasons.append(f"⭐ 高評分認證 ({rating:.1f}⭐，{num_reviews} 條評論)")
         elif rating >= 4.0:
@@ -1534,70 +1550,70 @@ class RouteAwareRecommender:
         extra_minutes = detour['extra_duration'] / 60.0
         detour_ratio = detour.get('detour_ratio', 0)
         
-        if extra_minutes < 3:
-            priority_reasons.append(f"🎯 幾乎順路 (僅需額外 {extra_minutes:.0f} 分鐘)")
-        elif extra_minutes < 8:
-            reasons.append(f"🚗 輕鬆到達 (額外 {extra_minutes:.0f} 分鐘)")
-        elif extra_minutes < 20 and detour_ratio < 0.3:
-            reasons.append(f"🗺️ 適度繞行 (額外 {extra_minutes:.0f} 分鐘，值得一訪)")
+        if extra_minutes < 10:
+            priority_reasons.append(f"幾乎順路 (僅需額外 {extra_minutes:.0f} 分鐘)")
+        elif extra_minutes < 20:
+            reasons.append(f"輕鬆到達 (額外 {extra_minutes:.0f} 分鐘)")
+        elif extra_minutes < 30 and detour_ratio < 0.3:
+            reasons.append(f"適度繞行 (額外 {extra_minutes:.0f} 分鐘，值得一訪)")
         
         # 4. 價格與價值
         price_level = poi.get('price_level', 0)
         user_avg_price = user_profile.get('avg_price_level', 2.0)
         
         if price_level <= user_avg_price - 0.5:
-            reasons.append("💰 超值選擇")
+            reasons.append("超值選擇")
         elif price_level <= user_avg_price:
-            reasons.append("💵 價格合理")
+            reasons.append("價格合理")
         elif price_level == 0:
-            reasons.append("🆓 免費景點")
+            reasons.append("免費景點")
         
         # 5. 特色與便利性
         special_features = []
         if poi.get('is_open_24h', False):
-            special_features.append("🕐 24小時營業")
+            special_features.append("24小時營業")
         if poi.get('wheelchair_accessible', False):
-            special_features.append("♿ 無障礙設施")
+            special_features.append("無障礙設施")
         if poi.get('good_for_groups', False):
-            special_features.append("👥 適合團體")
+            special_features.append("適合團體")
         if poi.get('has_parking', False):
-            special_features.append("🅿️ 有停車場")
+            special_features.append("有停車場")
         if poi.get('pet_friendly', False):
-            special_features.append("🐕 寵物友善")
+            special_features.append("寵物友善")
         
         if special_features:
             reasons.append(f"✨ {special_features[0]}")
         
         # 6. 熱門度與趨勢
         if num_reviews > 500:
-            reasons.append(f"� 超人氣景點 ({num_reviews}+ 遊客推薦)")
+            reasons.append(f"超人氣景點 ({num_reviews}+ 遊客推薦)")
         elif num_reviews > 100:
-            reasons.append(f"📈 熱門選擇 ({num_reviews} 條評論)")
+            reasons.append(f"熱門選擇 ({num_reviews} 條評論)")
         
         # 7. 推薦強度
         if score > 0.85:
-            priority_reasons.append("⭐ AI 強烈推薦!")
+            priority_reasons.append("AI 強烈推薦!")
         elif score > 0.75:
-            reasons.append("👌 AI 推薦")
+            reasons.append("AI 推薦")
         
         # 8. 獨特性與發現價值
         if num_reviews < 20 and rating >= 4.2:
-            reasons.append("💎 隱藏寶石 (小眾但高品質)")
+            reasons.append("隱藏寶石 (小眾但高品質)")
         
         # 9. 季節性或時間相關
         import datetime
         current_hour = datetime.datetime.now().hour
         if poi.get('good_for_evening', False) and current_hour >= 17:
-            reasons.append("🌆 夜晚好去處")
+            reasons.append("夜晚好去處")
         elif poi.get('good_for_morning', False) and current_hour <= 11:
-            reasons.append("🌅 晨間推薦")
+            reasons.append("晨間推薦")
         
         # 組合最終理由 (優先級理由 + 一般理由)
         final_reasons = priority_reasons[:2] + reasons
         
         # 確保至少有一個理由
         if not final_reasons:
-            final_reasons.append(f"📍 推薦景點 (評分 {rating:.1f}⭐)")
+            final_reasons.append(f"推薦景點 (評分 {rating:.1f})")
         
         return final_reasons[:4]  # 最多返回4個理由，提供更豐富的資訊
 

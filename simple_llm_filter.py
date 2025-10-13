@@ -35,19 +35,20 @@ class SimpleLLMFilter:
         print(f"   端點: {self.base_url}")
         print(f"   模型: {self.model}")
     
-    def is_travel_relevant(self, poi: Dict[str, Any]) -> bool:
+    def is_travel_relevant(self, poi: Dict[str, Any], user_categories: Optional[List[str]] = None) -> bool:
         """
         判斷POI是否適合旅客
         
         Args:
             poi: POI資訊字典
+            user_categories: 用戶偏好的類別列表（可選）
             
         Returns:
             True if 適合旅客, False otherwise
         """
         try:
             # 構建判斷提示
-            prompt = self._build_travel_relevance_prompt(poi)
+            prompt = self._build_travel_relevance_prompt(poi, user_categories)
             
             # 調用LLM
             response = self._call_llm(prompt)
@@ -63,12 +64,13 @@ class SimpleLLMFilter:
             print(f"   LLM判斷失敗: {e}")
             return self._fallback_travel_filter(poi)
     
-    def filter_travel_pois(self, pois: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def filter_travel_pois(self, pois: List[Dict[str, Any]], user_categories: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
         批量過濾POI列表
         
         Args:
             pois: POI列表
+            user_categories: 用戶偏好的類別列表（可選）
             
         Returns:
             過濾後的POI列表
@@ -78,6 +80,8 @@ class SimpleLLMFilter:
         
         print(f"🔍 開始LLM旅遊相關性過濾...")
         print(f"   輸入POI數量: {len(pois)}")
+        if user_categories:
+            print(f"   用戶偏好類別: {', '.join(user_categories)}")
         
         filtered_pois = []
         rejected_count = 0
@@ -88,7 +92,7 @@ class SimpleLLMFilter:
             
             print(f"   ({i}/{len(pois)}) 檢查: {poi_name} ({poi_category})")
             
-            if self.is_travel_relevant(poi):
+            if self.is_travel_relevant(poi, user_categories):
                 filtered_pois.append(poi)
                 print(f"     ✅ 通過 - 適合旅客")
             else:
@@ -109,7 +113,8 @@ class SimpleLLMFilter:
         self, 
         ranked_pois: List[Dict[str, Any]], 
         target_k: int,
-        multiplier: int = 3
+        multiplier: int = 3,
+        user_categories: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
         按排序逐一審核，直到收集到target_k個通過的POI
@@ -123,6 +128,7 @@ class SimpleLLMFilter:
             ranked_pois: 已排序的POI列表
             target_k: 目標數量
             multiplier: 初始搜索倍數（搜索前 target_k * multiplier 個）
+            user_categories: 用戶偏好的類別列表（可選）
             
         Returns:
             通過LLM審核的TOP K POI列表
@@ -134,6 +140,8 @@ class SimpleLLMFilter:
         print(f"   目標: TOP {target_k} 推薦")
         print(f"   輸入: {len(ranked_pois)} 個排序POI")
         print(f"   審核範圍: 全部 {len(ranked_pois)} 個候選（不早停）")
+        if user_categories:
+            print(f"   用戶偏好類別: {', '.join(user_categories)}")
         
         approved_pois = []
         search_limit = min(len(ranked_pois), target_k * multiplier)
@@ -150,7 +158,7 @@ class SimpleLLMFilter:
             print(f"   類別: {poi_category} | 評分: {rating:.1f}⭐")
             
             # LLM審核
-            if self.is_travel_relevant(poi):
+            if self.is_travel_relevant(poi, user_categories):
                 approved_pois.append(poi)
                 print(f"   ✅ 通過審核! (已收集 {len(approved_pois)} 個)")
             else:
@@ -172,11 +180,20 @@ class SimpleLLMFilter:
         # 返回前K個通過審核的POI
         return approved_pois[:target_k]
     
-    def _build_travel_relevance_prompt(self, poi: Dict[str, Any]) -> str:
+    def _build_travel_relevance_prompt(self, poi: Dict[str, Any], user_categories: Optional[List[str]] = None) -> str:
         """構建旅遊相關性判斷提示"""
         poi_name = poi.get('name', '未知')
         poi_category = poi.get('primary_category', '未分類')
         poi_description = poi.get('description', '')
+        
+        # 構建用戶偏好說明
+        user_preference_text = ""
+        if user_categories and len(user_categories) > 0:
+            categories_str = '、'.join(user_categories)
+            user_preference_text = f"""
+用戶偏好類別: {categories_str}
+（此POI如果屬於或相關於用戶偏好類別，應該更傾向判斷為"適合"）
+"""
         
         prompt = f"""你是一個專業的旅遊推薦系統專家。請判斷以下POI是否適合推薦給旅客。
 
@@ -184,7 +201,7 @@ POI資訊:
 - 名稱: {poi_name}
 - 類別: {poi_category}
 - 描述: {poi_description}
-
+{user_preference_text}
 判斷標準：
 ✅ 適合旅客的POI:
 - 旅遊景點、博物館、公園
@@ -193,6 +210,7 @@ POI資訊:
 - 娛樂場所、劇院、遊樂園
 - 交通樞紐、機場、車站
 - 旅遊服務設施
+- **特別考慮：如果POI類別符合用戶偏好，應優先判斷為適合**
 
 ❌ 不適合旅客的POI:
 - 倉儲設施、自助倉庫
