@@ -272,10 +272,10 @@ if __name__ == '__main__':
     print("="*60)
     print()
     
-    # 啟動Flask服務器
+    # 啟動Flask服務器（正式模式）
     app.run(
         host='0.0.0.0',
         port=5000,
-        debug=True,
+        debug=False,  # 正式模式，不會重新加載
         threaded=True
     )
