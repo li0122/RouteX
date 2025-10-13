@@ -35,16 +35,16 @@ class SimpleLLMFilter:
         print(f"   端點: {self.base_url}")
         print(f"   模型: {self.model}")
     
-    def is_travel_relevant(self, poi: Dict[str, Any], user_categories: Optional[List[str]] = None) -> bool:
+    def is_travel_relevant(self, poi: Dict[str, Any], user_categories: Optional[List[str]] = None) -> tuple[bool, str, float]:
         """
-        判斷POI是否適合旅客
+        判斷POI是否適合旅客，並返回詳細理由
         
         Args:
             poi: POI資訊字典
             user_categories: 用戶偏好的類別列表（可選）
             
         Returns:
-            True if 適合旅客, False otherwise
+            (is_relevant, reason, score): (是否適合, 理由, 評分0-10)
         """
         try:
             # 構建判斷提示
@@ -54,15 +54,17 @@ class SimpleLLMFilter:
             response = self._call_llm(prompt)
             
             if response:
-                # 解析回應
+                # 解析回應（返回是否通過、理由、評分）
                 return self._parse_travel_relevance_response(response)
             
             # 失敗時的預設判斷
-            return self._fallback_travel_filter(poi)
+            fallback_result = self._fallback_travel_filter(poi)
+            return fallback_result, "LLM API 失敗，使用備用規則", 5.0
             
         except Exception as e:
             print(f"   LLM判斷失敗: {e}")
-            return self._fallback_travel_filter(poi)
+            fallback_result = self._fallback_travel_filter(poi)
+            return fallback_result, f"錯誤: {str(e)}", 5.0
     
     def filter_travel_pois(self, pois: List[Dict[str, Any]], user_categories: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
@@ -92,12 +94,16 @@ class SimpleLLMFilter:
             
             print(f"   ({i}/{len(pois)}) 檢查: {poi_name} ({poi_category})")
             
-            if self.is_travel_relevant(poi, user_categories):
+            is_relevant, reason, score = self.is_travel_relevant(poi, user_categories)
+            
+            if is_relevant:
                 filtered_pois.append(poi)
-                print(f"     ✅ 通過 - 適合旅客")
+                print(f"     ✅ 通過 - 評分: {score:.1f}/10")
+                print(f"     💡 理由: {reason}")
             else:
                 rejected_count += 1
-                print(f"     ❌ 拒絕 - 不適合旅客")
+                print(f"     ❌ 拒絕 - 評分: {score:.1f}/10")
+                print(f"     💡 理由: {reason}")
             
             # 控制請求頻率
             if i < len(pois):  # 不是最後一個
@@ -157,12 +163,17 @@ class SimpleLLMFilter:
             print(f"🔍 審核第 {rank}/{len(ranked_pois)} 名: {poi_name}")
             print(f"   類別: {poi_category} | 評分: {rating:.1f}⭐")
             
-            # LLM審核
-            if self.is_travel_relevant(poi, user_categories):
+            # LLM審核（獲取詳細理由）
+            is_relevant, reason, llm_score = self.is_travel_relevant(poi, user_categories)
+            
+            print(f"   📊 LLM評分: {llm_score:.1f}/10")
+            print(f"   💭 審核理由: {reason}")
+            
+            if is_relevant:
                 approved_pois.append(poi)
                 print(f"   ✅ 通過審核! (已收集 {len(approved_pois)} 個)")
             else:
-                print(f"   ❌ 審核未通過 (不適合旅客)")
+                print(f"   ❌ 審核未通過")
             
             print()
             
@@ -202,27 +213,34 @@ class SimpleLLMFilter:
 描述: {poi_description}
 
 **嚴格審核標準**：
-1. 只有當這個地點**主要提供**用戶想要的活動時，才回答 yes
-   - 例如：用戶想「喝咖啡」→ 咖啡廳、咖啡館 accept | 餐廳、酒吧 deny
-   - 例如：用戶想「吃海鮮」→ 海鮮餐廳 accept | 一般餐廳、咖啡廳 deny
-   - 例如：用戶想「看博物館」→ 博物館、美術館 accept | 公園、商店 deny
-   - 例如：用戶想「吃義大利菜」→ 義大利餐廳 accept | 其他國家料理 deny
+1. 只有當這個地點**主要提供**用戶想要的活動時，才能通過
+   - 例如：用戶想「喝咖啡」→ 咖啡廳、咖啡館 ✅ | 餐廳、酒吧 ❌
+   - 例如：用戶想「吃海鮮」→ 海鮮餐廳 ✅ | 一般餐廳、咖啡廳 ❌
+   - 例如：用戶想「看博物館」→ 博物館、美術館 ✅ | 公園、商店 ❌
+   - 例如：用戶想「吃義大利菜」→ 義大利餐廳 ✅ | 其他國家料理 ❌
 
-2. **deny**以下情況：
+2. **自動拒絕**以下情況：
    - 地點類別與用戶需求不直接相關
    - 地點「也許可以」但不是主要用途
    - 評分過低（< 3.0 星）或評論極少（< 5 個）
    - 名稱看起來像住宅、辦公室、停車場等非商業場所
 
 3. **特別注意**：
-   - 用戶說「喝咖啡」就**只推薦**咖啡廳/咖啡館
-   - 不要推薦「也可以喝到咖啡」的餐廳或酒吧
-   - 寧可錯殺不可放過，保持高標準
    - 類別名稱必須**直接包含**或**明確相關**於用戶需求
+   - 寧可錯殺不可放過，保持高標準
 
-**只回答 yes 或 no。如果不確定，請回答 no。**
+**請按照以下格式回答（必須嚴格遵守此格式）：**
 
-答案:"""
+決策: [ACCEPT 或 REJECT]
+評分: [0-10 的數字，表示與用戶需求的匹配度]
+理由: [詳細說明為什麼通過或拒絕，具體分析地點類別與用戶需求的關係]
+
+範例回答：
+決策: REJECT
+評分: 3
+理由: 雖然這是一家餐廳可能也提供咖啡，但用戶明確想要「喝咖啡」，應該推薦專業的咖啡廳，而非一般餐廳。類別不匹配。
+
+現在請審核:"""
         else:
             # 沒有特定需求時，使用一般審核標準
             prompt = f"""你是一個旅遊推薦專家。請判斷以下POI是否適合作為旅遊推薦：
@@ -250,9 +268,13 @@ POI資訊:
 - 醫療診所（除非緊急）
 - 評分 < 3.0 星或評論 < 5 個
 
-請只回答 yes 或 no。
+**請按照以下格式回答：**
 
-答案:"""
+決策: [ACCEPT 或 REJECT]
+評分: [0-10 的數字，表示作為旅遊推薦的適合度]
+理由: [詳細說明為什麼適合或不適合作為旅遊推薦]
+
+現在請審核:"""
         
         return prompt
     
@@ -270,7 +292,7 @@ POI資訊:
                     }
                 ],
                 "temperature": 0.1,
-                "max_tokens": 200,
+                "max_tokens": 500,  # 增加 token 數量以獲得詳細理由
                 "stream": False
             }
             
@@ -295,46 +317,72 @@ POI資訊:
             print(f"   LLM API調用失敗: {e}")
             return None
     
-    def _parse_travel_relevance_response(self, response: str) -> bool:
-        """解析LLM回應 - 嚴格模式"""
+    def _parse_travel_relevance_response(self, response: str) -> tuple[bool, str, float]:
+        """解析LLM回應 - 結構化解析
+        
+        Returns:
+            (is_accepted, reason, score): (是否通過, 理由, 評分0-10)
+        """
         if not response:
-            return False
+            return False, "LLM 無回應", 0.0
+        
+        try:
+            # 解析結構化回應
+            lines = response.strip().split('\n')
+            decision = None
+            score = 5.0
+            reason = "無法解析理由"
             
-        response_lower = response.lower().strip()
-        
-        # 優先檢查明確的 yes/no（嚴格模式）
-        if response_lower.startswith('yes') or response_lower == 'yes':
-            return True
-        elif response_lower.startswith('no') or response_lower == 'no':
-            return False
-        
-        # 中文適合/不適合
-        if '適合' in response and '不適合' not in response:
-            return True
-        elif '不適合' in response:
-            return False
-        
-        # 英文關鍵詞（更嚴格）
-        if 'yes' in response_lower and 'no' not in response_lower:
-            return True
-        elif 'no' in response_lower:
-            return False
-            
-        # 其他積極詞
-        positive_keywords = ['suitable', 'appropriate', 'relevant', 'recommend']
-        negative_keywords = ['not suitable', 'inappropriate', 'irrelevant', 'not recommend', 'reject']
-        
-        for keyword in negative_keywords:
-            if keyword in response_lower:
-                return False
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # 解析決策
+                if line.startswith('決策:') or line.startswith('Decision:'):
+                    decision_text = line.split(':', 1)[1].strip().upper()
+                    if 'ACCEPT' in decision_text or '通過' in decision_text:
+                        decision = True
+                    elif 'REJECT' in decision_text or '拒絕' in decision_text:
+                        decision = False
                 
-        for keyword in positive_keywords:
-            if keyword in response_lower:
-                return True
-        
-        # 嚴格模式：無法解析則拒絕（寧可錯殺）
-        print(f"   ⚠️ 無法解析LLM回應，嚴格模式預設拒絕: {response[:50]}")
-        return False
+                # 解析評分
+                elif line.startswith('評分:') or line.startswith('Score:'):
+                    score_text = line.split(':', 1)[1].strip()
+                    # 提取數字
+                    import re
+                    score_match = re.search(r'(\d+(?:\.\d+)?)', score_text)
+                    if score_match:
+                        score = float(score_match.group(1))
+                        # 確保在 0-10 範圍內
+                        score = max(0.0, min(10.0, score))
+                
+                # 解析理由
+                elif line.startswith('理由:') or line.startswith('Reason:'):
+                    reason = line.split(':', 1)[1].strip()
+            
+            # 如果無法解析決策，嘗試從回應文字判斷
+            if decision is None:
+                response_lower = response.lower()
+                if 'accept' in response_lower or '通過' in response:
+                    decision = True
+                    if reason == "無法解析理由":
+                        reason = "根據回應文字判斷為通過"
+                elif 'reject' in response_lower or '拒絕' in response:
+                    decision = False
+                    if reason == "無法解析理由":
+                        reason = "根據回應文字判斷為拒絕"
+                else:
+                    # 無法判斷，嚴格模式預設拒絕
+                    decision = False
+                    reason = f"無法解析決策，預設拒絕。原始回應: {response[:100]}"
+                    print(f"   ⚠️ 無法解析結構化回應: {response[:100]}")
+            
+            return decision, reason, score
+            
+        except Exception as e:
+            print(f"   ⚠️ 解析LLM回應時出錯: {e}")
+            return False, f"解析錯誤: {str(e)}", 0.0
     
     def _fallback_travel_filter(self, poi: Dict[str, Any]) -> bool:
         """備用過濾邏輯 - 當LLM失敗時使用"""
