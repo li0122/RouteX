@@ -1232,11 +1232,6 @@ class RouteAwareRecommender:
                     if failed_requests <= 3:  # 只顯示前3個錯誤
                         print(f"   OSRM查詢失敗: {e}")
                     continue
-            
-            # 早停機制: 如果已經找到足夠的POI
-            if len(valid_pois) >= top_k * 2:  # 找到隙2倍的目標數量就停止
-                print(f"   早停: 已找到足夠的POI ({len(valid_pois)})")  
-                break
         
         osrm_time = time.time() - osrm_start
         print(f"   路線過濾完成: {len(valid_pois)} 個有效POI (耗時: {osrm_time:.3f}s)")
