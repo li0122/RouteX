@@ -1,468 +1,934 @@
-/**// 離線地圖座標選擇器
+/**/**// 離線地圖座標選擇器
 
- * 離線地圖選擇器 - 改進版// 使用 Canvas 繪製簡單的座標網格系統
+ * 離線地圖選擇器 - Canvas版本
 
- * 功能：縮放、平移、預設地標、懸停提示、距離計算
+ * 功能：縮放、平移、預設地標、懸停提示、距離計算 * 離線地圖選擇器 - 改進版// 使用 Canvas 繪製簡單的座標網格系統
 
- */class OfflineMapPicker {
+ */
 
-class OfflineMapPicker {    constructor(containerId, options = {}) {
+class OfflineMapPicker { * 功能：縮放、平移、預設地標、懸停提示、距離計算
 
-    constructor(canvasId, options = {}) {        this.container = document.getElementById(containerId);
+    constructor(containerId, options = {}) {
 
-        this.canvas = document.getElementById(canvasId);        this.canvas = document.createElement('canvas');
+        this.container = document.getElementById(containerId); */class OfflineMapPicker {
 
-        this.ctx = this.canvas.getContext('2d');        this.ctx = this.canvas.getContext('2d');
+        if (!this.container) {
 
-                
+            console.error('Container not found:', containerId);class OfflineMapPicker {    constructor(containerId, options = {}) {
 
-        // 地圖邊界 (舊金山灣區)        // 預設範圍：舊金山灣區
+            return;
 
-        this.bounds = {        this.bounds = options.bounds || {
+        }    constructor(canvasId, options = {}) {        this.container = document.getElementById(containerId);
 
-            north: 37.9,            minLat: 37.6,
 
-            south: 37.6,            maxLat: 37.9,
+
+        // 預設範圍：舊金山灣區        this.canvas = document.getElementById(canvasId);        this.canvas = document.createElement('canvas');
+
+        this.bounds = options.bounds || {
+
+            minLat: 37.6,        this.ctx = this.canvas.getContext('2d');        this.ctx = this.canvas.getContext('2d');
+
+            maxLat: 37.9,
+
+            minLng: -122.6,                
+
+            maxLng: -122.2
+
+        };        // 地圖邊界 (舊金山灣區)        // 預設範圍：舊金山灣區
+
+
+
+        // 標記        this.bounds = {        this.bounds = options.bounds || {
+
+        this.startMarker = null;
+
+        this.endMarker = null;            north: 37.9,            minLat: 37.6,
+
+        this.isSelectingStart = false;
+
+        this.isSelectingEnd = false;            south: 37.6,            maxLat: 37.9,
+
+        this.hoveredPoint = null;
 
             west: -122.6,            minLng: -122.6,
 
-            east: -122.2            maxLng: -122.2
+        // 縮放和平移
 
-        };        };
+        this.scale = 1;            east: -122.2            maxLng: -122.2
 
-                
+        this.offsetX = 0;
+
+        this.offsetY = 0;        };        };
+
+        this.isDragging = false;
+
+        this.dragStartX = 0;                
+
+        this.dragStartY = 0;
 
         // 標記狀態        // 標記
 
-        this.startMarker = null;        this.startMarker = null;
+        // 回調函數
+
+        this.onStartSelect = options.onStartSelect || (() => {});        this.startMarker = null;        this.startMarker = null;
+
+        this.onEndSelect = options.onEndSelect || (() => {});
 
         this.endMarker = null;        this.endMarker = null;
 
-        this.currentMode = null; // 'start' or 'end'        this.isSelectingStart = false;
+        // 預設地點
 
-                this.isSelectingEnd = false;
+        this.presetLocations = [        this.currentMode = null; // 'start' or 'end'        this.isSelectingStart = false;
 
-        // 縮放和平移狀態        this.hoveredPoint = null;
+            { name: '舊金山市中心', lat: 37.7749, lng: -122.4194, icon: '🏙️', color: '#f59e0b' },
 
-        this.scale = 1.0;        
+            { name: '金門大橋', lat: 37.8199, lng: -122.4783, icon: '🌉', color: '#ef4444' },                this.isSelectingEnd = false;
+
+            { name: '漁人碼頭', lat: 37.8080, lng: -122.4177, icon: '⛵', color: '#3b82f6' },
+
+            { name: '金門公園', lat: 37.7694, lng: -122.4862, icon: '🌳', color: '#10b981' },        // 縮放和平移狀態        this.hoveredPoint = null;
+
+            { name: '雙子峰', lat: 37.7544, lng: -122.4477, icon: '⛰️', color: '#8b5cf6' },
+
+            { name: '聯合廣場', lat: 37.7880, lng: -122.4075, icon: '🏛️', color: '#ec4899' },        this.scale = 1.0;        
+
+        ];
 
         this.minScale = 0.5;        // 縮放和平移
 
-        this.maxScale = 3.0;        this.scale = 1;
+        this.init();
 
-        this.offsetX = 0;        this.offsetX = 0;
+    }        this.maxScale = 3.0;        this.scale = 1;
 
-        this.offsetY = 0;        this.offsetY = 0;
 
-                this.isDragging = false;
 
-        // 拖動狀態        this.dragStartX = 0;
+    init() {        this.offsetX = 0;        this.offsetX = 0;
 
-        this.isDragging = false;        this.dragStartY = 0;
+        // 創建 Canvas
 
-        this.dragStartX = 0;        
+        this.canvas = document.createElement('canvas');        this.offsetY = 0;        this.offsetY = 0;
+
+        this.canvas.width = 800;
+
+        this.canvas.height = 500;                this.isDragging = false;
+
+        this.canvas.style.width = '100%';
+
+        this.canvas.style.height = 'auto';        // 拖動狀態        this.dragStartX = 0;
+
+        this.canvas.style.border = '2px solid #e5e7eb';
+
+        this.canvas.style.borderRadius = '8px';        this.isDragging = false;        this.dragStartY = 0;
+
+        this.canvas.style.cursor = 'crosshair';
+
+        this.canvas.style.background = '#f9fafb';        this.dragStartX = 0;        
+
+        this.container.appendChild(this.canvas);
 
         this.dragStartY = 0;        // 回調函數
 
+        this.ctx = this.canvas.getContext('2d');
+
         this.lastOffsetX = 0;        this.onStartSelect = options.onStartSelect || (() => {});
 
-        this.lastOffsetY = 0;        this.onEndSelect = options.onEndSelect || (() => {});
+        // 綁定事件
 
-                
+        this.canvas.addEventListener('click', this.handleClick.bind(this));        this.lastOffsetY = 0;        this.onEndSelect = options.onEndSelect || (() => {});
 
-        // 懸停狀態        // 預設地點
+        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+
+        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));                
+
+        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+
+        this.canvas.addEventListener('mouseleave', this.handleMouseLeave.bind(this));        // 懸停狀態        // 預設地點
+
+        this.canvas.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
 
         this.mouseX = 0;        this.presetLocations = [
 
-        this.mouseY = 0;            { name: '舊金山市中心', lat: 37.7749, lng: -122.4194, icon: '🏙️', color: '#f59e0b' },
+        // 初始繪製
+
+        this.draw();        this.mouseY = 0;            { name: '舊金山市中心', lat: 37.7749, lng: -122.4194, icon: '🏙️', color: '#f59e0b' },
+
+    }
 
         this.showHoverTip = false;            { name: '金門大橋', lat: 37.8199, lng: -122.4783, icon: '🌉', color: '#ef4444' },
 
-                    { name: '漁人碼頭', lat: 37.8080, lng: -122.4177, icon: '⛵', color: '#3b82f6' },
+    // 經緯度轉Canvas座標
 
-        // 預設地標            { name: '金門公園', lat: 37.7694, lng: -122.4862, icon: '🌳', color: '#10b981' },
+    latLngToCanvas(lat, lng) {                    { name: '漁人碼頭', lat: 37.8080, lng: -122.4177, icon: '⛵', color: '#3b82f6' },
 
-        this.presetLocations = [            { name: '雙子峰', lat: 37.7544, lng: -122.4477, icon: '⛰️', color: '#8b5cf6' },
+        const { minLat, maxLat, minLng, maxLng } = this.bounds;
 
-            { name: '舊金山市中心', lat: 37.7749, lng: -122.4194, icon: '🏙️', color: '#ff6b35' },            { name: '聯合廣場', lat: 37.7880, lng: -122.4075, icon: '🏛️', color: '#ec4899' },
+                // 預設地標            { name: '金門公園', lat: 37.7694, lng: -122.4862, icon: '🌳', color: '#10b981' },
 
-            { name: '金門大橋', lat: 37.8199, lng: -122.4783, icon: '🌉', color: '#e63946' },        ];
+        // 正規化到 0-1
 
-            { name: '漁人碼頭', lat: 37.8080, lng: -122.4177, icon: '⛵', color: '#457b9d' },        
+        const x = (lng - minLng) / (maxLng - minLng);        this.presetLocations = [            { name: '雙子峰', lat: 37.7544, lng: -122.4477, icon: '⛰️', color: '#8b5cf6' },
 
-            { name: '金門公園', lat: 37.7694, lng: -122.4862, icon: '🌳', color: '#2a9d8f' },        this.init();
+        const y = 1 - (lat - minLat) / (maxLat - minLat); // 翻轉Y軸
 
-            { name: '雙子峰', lat: 37.7544, lng: -122.4477, icon: '⛰️', color: '#9d4edd' },    }
+                    { name: '舊金山市中心', lat: 37.7749, lng: -122.4194, icon: '🏙️', color: '#ff6b35' },            { name: '聯合廣場', lat: 37.7880, lng: -122.4075, icon: '🏛️', color: '#ec4899' },
 
-            { name: '聯合廣場', lat: 37.7880, lng: -122.4075, icon: '🏛️', color: '#f72585' }    
+        // 應用縮放和平移
 
-        ];    init() {
+        const canvasX = x * this.canvas.width * this.scale + this.offsetX;            { name: '金門大橋', lat: 37.8199, lng: -122.4783, icon: '🌉', color: '#e63946' },        ];
 
-                // 設置 Canvas 大小
+        const canvasY = y * this.canvas.height * this.scale + this.offsetY;
 
-        // 回調函數        const containerWidth = this.container.offsetWidth;
+                    { name: '漁人碼頭', lat: 37.8080, lng: -122.4177, icon: '⛵', color: '#457b9d' },        
 
-        this.onLocationSelected = options.onLocationSelected || (() => {});        this.canvas.width = containerWidth;
+        return { x: canvasX, y: canvasY };
 
-                this.canvas.height = 500;
+    }            { name: '金門公園', lat: 37.7694, lng: -122.4862, icon: '🌳', color: '#2a9d8f' },        this.init();
 
-        this.init();        this.canvas.style.width = '100%';
 
-    }        this.canvas.style.height = '500px';
 
-            this.canvas.style.cursor = 'crosshair';
+    // Canvas座標轉經緯度            { name: '雙子峰', lat: 37.7544, lng: -122.4477, icon: '⛰️', color: '#9d4edd' },    }
 
-    init() {        this.canvas.style.borderRadius = '10px';
+    canvasToLatLng(canvasX, canvasY) {
 
-        // 設置 canvas 大小        this.canvas.style.border = '2px solid #e5e7eb';
-
-        this.canvas.width = this.canvas.offsetWidth;        
-
-        this.canvas.height = 500; // 增加高度以提供更好的視野        this.container.appendChild(this.canvas);
-
-                
-
-        // 綁定事件        // 添加事件監聽器
-
-        this.canvas.addEventListener('click', this.handleClick.bind(this));        this.canvas.addEventListener('click', (e) => this.handleClick(e));
-
-        this.canvas.addEventListener('wheel', this.handleWheel.bind(this));        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-
-        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));        this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-
-        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));        this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-
-        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));        this.canvas.addEventListener('mouseleave', (e) => this.handleMouseLeave(e));
-
-        this.canvas.addEventListener('mouseleave', this.handleMouseLeave.bind(this));        this.canvas.addEventListener('wheel', (e) => this.handleWheel(e));
-
-                
-
-        // 初始繪製        // 初始繪製
-
-        this.draw();        this.draw();
-
-    }    }
+        const { minLat, maxLat, minLng, maxLng } = this.bounds;            { name: '聯合廣場', lat: 37.7880, lng: -122.4075, icon: '🏛️', color: '#f72585' }    
 
         
 
-    // 座標轉換：經緯度 -> 像素    draw() {
+        // 反向縮放和平移        ];    init() {
 
-    latLngToPixel(lat, lng) {        // 清除畫布
+        const x = (canvasX - this.offsetX) / (this.canvas.width * this.scale);
 
-        const x = ((lng - this.bounds.west) / (this.bounds.east - this.bounds.west)) * this.canvas.width;        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        const y = (canvasY - this.offsetY) / (this.canvas.height * this.scale);                // 設置 Canvas 大小
+
+        
+
+        // 轉換為經緯度        // 回調函數        const containerWidth = this.container.offsetWidth;
+
+        const lng = minLng + x * (maxLng - minLng);
+
+        const lat = maxLat - y * (maxLat - minLat); // 翻轉Y軸        this.onLocationSelected = options.onLocationSelected || (() => {});        this.canvas.width = containerWidth;
+
+        
+
+        return { lat, lng };                this.canvas.height = 500;
+
+    }
+
+        this.init();        this.canvas.style.width = '100%';
+
+    // 繪製地圖
+
+    draw() {    }        this.canvas.style.height = '500px';
+
+        const ctx = this.ctx;
+
+        const width = this.canvas.width;            this.canvas.style.cursor = 'crosshair';
+
+        const height = this.canvas.height;
+
+    init() {        this.canvas.style.borderRadius = '10px';
+
+        // 清空畫布
+
+        ctx.clearRect(0, 0, width, height);        // 設置 canvas 大小        this.canvas.style.border = '2px solid #e5e7eb';
+
+
+
+        // 背景        this.canvas.width = this.canvas.offsetWidth;        
+
+        ctx.fillStyle = '#f0f9ff';
+
+        ctx.fillRect(0, 0, width, height);        this.canvas.height = 500; // 增加高度以提供更好的視野        this.container.appendChild(this.canvas);
+
+
+
+        // 繪製網格                
+
+        this.drawGrid();
+
+        // 綁定事件        // 添加事件監聽器
+
+        // 繪製預設地點
+
+        this.drawPresetLocations();        this.canvas.addEventListener('click', this.handleClick.bind(this));        this.canvas.addEventListener('click', (e) => this.handleClick(e));
+
+
+
+        // 繪製標記        this.canvas.addEventListener('wheel', this.handleWheel.bind(this));        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+
+        if (this.startMarker) {
+
+            this.drawMarker(this.startMarker.lat, this.startMarker.lng, '🟢', '#10b981', '出發點');        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));        this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+
+        }
+
+        if (this.endMarker) {        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));        this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+
+            this.drawMarker(this.endMarker.lat, this.endMarker.lng, '🔴', '#ef4444', '目的地');
+
+        }        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));        this.canvas.addEventListener('mouseleave', (e) => this.handleMouseLeave(e));
+
+
+
+        // 繪製連線        this.canvas.addEventListener('mouseleave', this.handleMouseLeave.bind(this));        this.canvas.addEventListener('wheel', (e) => this.handleWheel(e));
+
+        if (this.startMarker && this.endMarker) {
+
+            this.drawLine(this.startMarker, this.endMarker);                
+
+        }
+
+        // 初始繪製        // 初始繪製
+
+        // 繪製懸停提示
+
+        if (this.hoveredPoint) {        this.draw();        this.draw();
+
+            this.drawHoverTooltip(this.hoveredPoint);
+
+        }    }    }
+
+    }
+
+        
+
+    // 繪製網格
+
+    drawGrid() {    // 座標轉換：經緯度 -> 像素    draw() {
+
+        const ctx = this.ctx;
+
+        const { minLat, maxLat, minLng, maxLng } = this.bounds;    latLngToPixel(lat, lng) {        // 清除畫布
+
+
+
+        ctx.strokeStyle = '#e5e7eb';        const x = ((lng - this.bounds.west) / (this.bounds.east - this.bounds.west)) * this.canvas.width;        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.lineWidth = 1;
 
         const y = ((this.bounds.north - lat) / (this.bounds.north - this.bounds.south)) * this.canvas.height;        
 
-                this.ctx.save();
+        // 繪製經線
 
-        // 應用縮放和平移        this.ctx.translate(this.offsetX, this.offsetY);
+        const lngStep = 0.1;                this.ctx.save();
 
-        const scaledX = x * this.scale + this.offsetX;        this.ctx.scale(this.scale, this.scale);
+        for (let lng = minLng; lng <= maxLng; lng += lngStep) {
 
-        const scaledY = y * this.scale + this.offsetY;        
+            const { x: x1, y: y1 } = this.latLngToCanvas(minLat, lng);        // 應用縮放和平移        this.ctx.translate(this.offsetX, this.offsetY);
 
-                // 繪製背景
+            const { x: x2, y: y2 } = this.latLngToCanvas(maxLat, lng);
+
+                    const scaledX = x * this.scale + this.offsetX;        this.ctx.scale(this.scale, this.scale);
+
+            if (x1 >= 0 && x1 <= this.canvas.width) {
+
+                ctx.beginPath();        const scaledY = y * this.scale + this.offsetY;        
+
+                ctx.moveTo(x1, y1);
+
+                ctx.lineTo(x2, y2);                // 繪製背景
+
+                ctx.stroke();
 
         return { x: scaledX, y: scaledY };        const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
 
-    }        gradient.addColorStop(0, '#e0f2fe');
+                // 標籤
 
-            gradient.addColorStop(0.5, '#f0f9ff');
+                ctx.fillStyle = '#6b7280';    }        gradient.addColorStop(0, '#e0f2fe');
 
-    // 座標轉換：像素 -> 經緯度        gradient.addColorStop(1, '#dbeafe');
+                ctx.font = '10px sans-serif';
 
-    pixelToLatLng(x, y) {        this.ctx.fillStyle = gradient;
-
-        // 補償縮放和平移        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        const unscaledX = (x - this.offsetX) / this.scale;        
-
-        const unscaledY = (y - this.offsetY) / this.scale;        // 繪製網格
-
-                this.drawGrid();
-
-        const lng = this.bounds.west + (unscaledX / this.canvas.width) * (this.bounds.east - this.bounds.west);        
-
-        const lat = this.bounds.north - (unscaledY / this.canvas.height) * (this.bounds.north - this.bounds.south);        // 繪製預設地點
-
-                this.drawPresetLocations();
-
-        return { lat, lng };        
-
-    }        // 繪製標記
-
-            if (this.startMarker) {
-
-    // 計算兩點距離 (公里)            this.drawMarker(this.startMarker, '#10b981', '起點', '📍');
-
-    calculateDistance(lat1, lng1, lat2, lng2) {        }
-
-        const R = 6371; // 地球半徑 (km)        if (this.endMarker) {
-
-        const dLat = (lat2 - lat1) * Math.PI / 180;            this.drawMarker(this.endMarker, '#ef4444', '終點', '🎯');
-
-        const dLng = (lng2 - lng1) * Math.PI / 180;        }
-
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +        
-
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *        // 如果兩個標記都存在，繪製連線和距離
-
-                  Math.sin(dLng/2) * Math.sin(dLng/2);        if (this.startMarker && this.endMarker) {
-
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));            this.drawLine();
-
-        return R * c;        }
-
-    }        
-
-            // 繪製懸停提示
-
-    // 處理滾輪縮放        if (this.hoveredPoint) {
-
-    handleWheel(e) {            this.drawHoverTooltip(this.hoveredPoint);
-
-        e.preventDefault();        }
-
-                
-
-        const delta = e.deltaY > 0 ? -0.1 : 0.1;        this.ctx.restore();
-
-        const newScale = Math.max(this.minScale, Math.min(this.maxScale, this.scale + delta));        
-
-                // 繪製控制說明（不受縮放影響）
-
-        if (newScale === this.scale) return;        this.drawControls();
+                ctx.fillText(lng.toFixed(1), x1 - 15, this.canvas.height - 5);            gradient.addColorStop(0.5, '#f0f9ff');
 
             }
 
-        // 以鼠標位置為中心縮放    
+        }    // 座標轉換：像素 -> 經緯度        gradient.addColorStop(1, '#dbeafe');
 
-        const rect = this.canvas.getBoundingClientRect();    drawGrid() {
 
-        const mouseX = e.clientX - rect.left;        this.ctx.strokeStyle = 'rgba(203, 213, 225, 0.5)';
 
-        const mouseY = e.clientY - rect.top;        this.ctx.lineWidth = 1 / this.scale;
+        // 繪製緯線    pixelToLatLng(x, y) {        this.ctx.fillStyle = gradient;
 
-                
+        const latStep = 0.1;
 
-        // 計算縮放前的世界座標        // 垂直線
+        for (let lat = minLat; lat <= maxLat; lat += latStep) {        // 補償縮放和平移        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        const worldX = (mouseX - this.offsetX) / this.scale;        const lngStep = (this.bounds.maxLng - this.bounds.minLng) / 10;
+            const { x: x1, y: y1 } = this.latLngToCanvas(lat, minLng);
 
-        const worldY = (mouseY - this.offsetY) / this.scale;        for (let i = 0; i <= 10; i++) {
-
-                    const lng = this.bounds.minLng + lngStep * i;
-
-        // 更新縮放            const pos = this.latLngToPixel(this.bounds.minLat, lng);
-
-        this.scale = newScale;            this.ctx.beginPath();
-
-                    this.ctx.moveTo(pos.x, 0);
-
-        // 調整偏移以保持鼠標位置不變            this.ctx.lineTo(pos.x, this.canvas.height);
-
-        this.offsetX = mouseX - worldX * this.scale;            this.ctx.stroke();
-
-        this.offsetY = mouseY - worldY * this.scale;        }
-
-                
-
-        this.draw();        // 水平線
-
-    }        const latStep = (this.bounds.maxLat - this.bounds.minLat) / 10;
-
-            for (let i = 0; i <= 10; i++) {
-
-    // 處理鼠標按下            const lat = this.bounds.minLat + latStep * i;
-
-    handleMouseDown(e) {            const pos = this.latLngToPixel(lat, this.bounds.minLng);
-
-        if (this.currentMode) return; // 選擇模式時不拖動            this.ctx.beginPath();
-
-                    this.ctx.moveTo(0, pos.y);
-
-        this.isDragging = true;            this.ctx.lineTo(this.canvas.width, pos.y);
-
-        const rect = this.canvas.getBoundingClientRect();            this.ctx.stroke();
-
-        this.dragStartX = e.clientX - rect.left;        }
-
-        this.dragStartY = e.clientY - rect.top;        
-
-        this.lastOffsetX = this.offsetX;        // 繪製座標標籤
-
-        this.lastOffsetY = this.offsetY;        this.ctx.fillStyle = '#64748b';
-
-        this.canvas.style.cursor = 'grabbing';        this.ctx.font = `${10 / this.scale}px Arial`;
-
-    }        
-
-            // 經度標籤（底部）
-
-    // 處理鼠標移動        for (let i = 0; i <= 4; i++) {
-
-    handleMouseMove(e) {            const lng = this.bounds.minLng + (this.bounds.maxLng - this.bounds.minLng) * (i / 4);
-
-        const rect = this.canvas.getBoundingClientRect();            const pos = this.latLngToPixel(this.bounds.minLat, lng);
-
-        this.mouseX = e.clientX - rect.left;            this.ctx.fillText(lng.toFixed(2), pos.x + 5, this.canvas.height - 5);
-
-        this.mouseY = e.clientY - rect.top;        }
-
-                
-
-        if (this.isDragging) {        // 緯度標籤（左側）
-
-            // 拖動地圖        for (let i = 0; i <= 4; i++) {
-
-            const dx = this.mouseX - this.dragStartX;            const lat = this.bounds.maxLat - (this.bounds.maxLat - this.bounds.minLat) * (i / 4);
-
-            const dy = this.mouseY - this.dragStartY;            const pos = this.latLngToPixel(lat, this.bounds.minLng);
-
-            this.offsetX = this.lastOffsetX + dx;            this.ctx.fillText(lat.toFixed(2), 5, pos.y + 15);
-
-            this.offsetY = this.lastOffsetY + dy;        }
-
-            this.draw();    }
-
-        } else if (this.currentMode) {    
-
-            // 選擇模式：顯示懸停提示    drawPresetLocations() {
-
-            this.showHoverTip = true;        this.presetLocations.forEach(location => {
-
-            this.draw();            const pos = this.latLngToPixel(location.lat, location.lng);
-
-        }            
-
-    }            // 繪製背景圓圈
-
-                this.ctx.beginPath();
-
-    // 處理鼠標釋放            this.ctx.arc(pos.x, pos.y, 20 / this.scale, 0, 2 * Math.PI);
-
-    handleMouseUp(e) {            this.ctx.fillStyle = location.color;
-
-        this.isDragging = false;            this.ctx.globalAlpha = 0.2;
-
-        this.canvas.style.cursor = this.currentMode ? 'crosshair' : 'default';            this.ctx.fill();
-
-    }            this.ctx.globalAlpha = 1;
-
-                
-
-    // 處理鼠標離開            // 繪製圖標
-
-    handleMouseLeave(e) {            this.ctx.font = `${16 / this.scale}px Arial`;
-
-        this.isDragging = false;            this.ctx.textAlign = 'center';
-
-        this.showHoverTip = false;            this.ctx.textBaseline = 'middle';
-
-        this.canvas.style.cursor = 'default';            this.ctx.fillText(location.icon, pos.x, pos.y);
-
-        this.draw();            
-
-    }            // 繪製名稱
-
-                this.ctx.font = `bold ${11 / this.scale}px Arial`;
-
-    // 處理點擊            this.ctx.fillStyle = '#1f2937';
-
-    handleClick(e) {            this.ctx.fillText(location.name, pos.x, pos.y + 25 / this.scale);
-
-        if (this.isDragging) return;        });
-
-        if (!this.currentMode) return;    }
+            const { x: x2, y: y2 } = this.latLngToCanvas(lat, maxLng);        const unscaledX = (x - this.offsetX) / this.scale;        
 
             
 
-        const rect = this.canvas.getBoundingClientRect();    drawMarker(position, color, label, icon) {
+            if (y1 >= 0 && y1 <= this.canvas.height) {        const unscaledY = (y - this.offsetY) / this.scale;        // 繪製網格
 
-        const x = e.clientX - rect.left;        // 繪製陰影
+                ctx.beginPath();
 
-        const y = e.clientY - rect.top;        this.ctx.beginPath();
+                ctx.moveTo(x1, y1);                this.drawGrid();
 
-                this.ctx.arc(position.x, position.y + 3 / this.scale, 18 / this.scale, 0, 2 * Math.PI);
+                ctx.lineTo(x2, y2);
 
-        // 檢查是否點擊了預設地標        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                ctx.stroke();        const lng = this.bounds.west + (unscaledX / this.canvas.width) * (this.bounds.east - this.bounds.west);        
 
-        for (const location of this.presetLocations) {        this.ctx.fill();
+
+
+                // 標籤        const lat = this.bounds.north - (unscaledY / this.canvas.height) * (this.bounds.north - this.bounds.south);        // 繪製預設地點
+
+                ctx.fillStyle = '#6b7280';
+
+                ctx.font = '10px sans-serif';                this.drawPresetLocations();
+
+                ctx.fillText(lat.toFixed(1), 5, y1 + 3);
+
+            }        return { lat, lng };        
+
+        }
+
+    }    }        // 繪製標記
+
+
+
+    // 繪製預設地點            if (this.startMarker) {
+
+    drawPresetLocations() {
+
+        const ctx = this.ctx;    // 計算兩點距離 (公里)            this.drawMarker(this.startMarker, '#10b981', '起點', '📍');
+
+        
+
+        this.presetLocations.forEach(location => {    calculateDistance(lat1, lng1, lat2, lng2) {        }
+
+            const { x, y } = this.latLngToCanvas(location.lat, location.lng);
+
+                    const R = 6371; // 地球半徑 (km)        if (this.endMarker) {
+
+            if (x < 0 || x > this.canvas.width || y < 0 || y > this.canvas.height) {
+
+                return; // 超出範圍        const dLat = (lat2 - lat1) * Math.PI / 180;            this.drawMarker(this.endMarker, '#ef4444', '終點', '🎯');
+
+            }
+
+        const dLng = (lng2 - lng1) * Math.PI / 180;        }
+
+            // 繪製圖標背景
+
+            ctx.fillStyle = location.color;        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +        
+
+            ctx.beginPath();
+
+            ctx.arc(x, y, 12, 0, Math.PI * 2);                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *        // 如果兩個標記都存在，繪製連線和距離
+
+            ctx.fill();
+
+                  Math.sin(dLng/2) * Math.sin(dLng/2);        if (this.startMarker && this.endMarker) {
+
+            // 繪製圖標
+
+            ctx.font = '16px sans-serif';        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));            this.drawLine();
+
+            ctx.textAlign = 'center';
+
+            ctx.textBaseline = 'middle';        return R * c;        }
+
+            ctx.fillText(location.icon, x, y);
+
+    }        
+
+            // 繪製名稱
+
+            ctx.font = 'bold 11px sans-serif';            // 繪製懸停提示
+
+            ctx.fillStyle = '#1f2937';
+
+            ctx.textAlign = 'center';    // 處理滾輪縮放        if (this.hoveredPoint) {
+
+            ctx.textBaseline = 'top';
+
+            ctx.fillText(location.name, x, y + 15);    handleWheel(e) {            this.drawHoverTooltip(this.hoveredPoint);
+
+        });
+
+    }        e.preventDefault();        }
+
+
+
+    // 繪製標記                
+
+    drawMarker(lat, lng, icon, color, label) {
+
+        const ctx = this.ctx;        const delta = e.deltaY > 0 ? -0.1 : 0.1;        this.ctx.restore();
+
+        const { x, y } = this.latLngToCanvas(lat, lng);
+
+        const newScale = Math.max(this.minScale, Math.min(this.maxScale, this.scale + delta));        
+
+        // 繪製背景圓圈
+
+        ctx.fillStyle = color;                // 繪製控制說明（不受縮放影響）
+
+        ctx.beginPath();
+
+        ctx.arc(x, y, 15, 0, Math.PI * 2);        if (newScale === this.scale) return;        this.drawControls();
+
+        ctx.fill();
+
+            }
+
+        // 白色邊框
+
+        ctx.strokeStyle = '#ffffff';        // 以鼠標位置為中心縮放    
+
+        ctx.lineWidth = 3;
+
+        ctx.stroke();        const rect = this.canvas.getBoundingClientRect();    drawGrid() {
+
+
+
+        // 繪製圖標        const mouseX = e.clientX - rect.left;        this.ctx.strokeStyle = 'rgba(203, 213, 225, 0.5)';
+
+        ctx.font = 'bold 18px sans-serif';
+
+        ctx.textAlign = 'center';        const mouseY = e.clientY - rect.top;        this.ctx.lineWidth = 1 / this.scale;
+
+        ctx.textBaseline = 'middle';
+
+        ctx.fillStyle = '#ffffff';                
+
+        ctx.fillText(icon, x, y);
+
+        // 計算縮放前的世界座標        // 垂直線
+
+        // 繪製標籤
+
+        ctx.font = 'bold 12px sans-serif';        const worldX = (mouseX - this.offsetX) / this.scale;        const lngStep = (this.bounds.maxLng - this.bounds.minLng) / 10;
+
+        ctx.fillStyle = color;
+
+        ctx.textAlign = 'center';        const worldY = (mouseY - this.offsetY) / this.scale;        for (let i = 0; i <= 10; i++) {
+
+        ctx.textBaseline = 'top';
+
+        ctx.fillText(label, x, y + 20);                    const lng = this.bounds.minLng + lngStep * i;
+
+    }
+
+        // 更新縮放            const pos = this.latLngToPixel(this.bounds.minLat, lng);
+
+    // 繪製連線
+
+    drawLine(start, end) {        this.scale = newScale;            this.ctx.beginPath();
+
+        const ctx = this.ctx;
+
+        const p1 = this.latLngToCanvas(start.lat, start.lng);                    this.ctx.moveTo(pos.x, 0);
+
+        const p2 = this.latLngToCanvas(end.lat, end.lng);
+
+        // 調整偏移以保持鼠標位置不變            this.ctx.lineTo(pos.x, this.canvas.height);
+
+        ctx.strokeStyle = '#6366f1';
+
+        ctx.lineWidth = 2;        this.offsetX = mouseX - worldX * this.scale;            this.ctx.stroke();
+
+        ctx.setLineDash([5, 5]);
+
+        ctx.beginPath();        this.offsetY = mouseY - worldY * this.scale;        }
+
+        ctx.moveTo(p1.x, p1.y);
+
+        ctx.lineTo(p2.x, p2.y);                
+
+        ctx.stroke();
+
+        ctx.setLineDash([]);        this.draw();        // 水平線
+
+
+
+        // 計算距離    }        const latStep = (this.bounds.maxLat - this.bounds.minLat) / 10;
+
+        const distance = this.calculateDistance(start.lat, start.lng, end.lat, end.lng);
+
+        const midX = (p1.x + p2.x) / 2;            for (let i = 0; i <= 10; i++) {
+
+        const midY = (p1.y + p2.y) / 2;
+
+    // 處理鼠標按下            const lat = this.bounds.minLat + latStep * i;
+
+        // 繪製距離標籤
+
+        ctx.fillStyle = '#6366f1';    handleMouseDown(e) {            const pos = this.latLngToPixel(lat, this.bounds.minLng);
+
+        ctx.fillRect(midX - 40, midY - 12, 80, 24);
+
+        ctx.fillStyle = '#ffffff';        if (this.currentMode) return; // 選擇模式時不拖動            this.ctx.beginPath();
+
+        ctx.font = 'bold 11px sans-serif';
+
+        ctx.textAlign = 'center';                    this.ctx.moveTo(0, pos.y);
+
+        ctx.textBaseline = 'middle';
+
+        ctx.fillText(`${distance.toFixed(1)} km`, midX, midY);        this.isDragging = true;            this.ctx.lineTo(this.canvas.width, pos.y);
+
+    }
+
+        const rect = this.canvas.getBoundingClientRect();            this.ctx.stroke();
+
+    // 繪製懸停提示
+
+    drawHoverTooltip(point) {        this.dragStartX = e.clientX - rect.left;        }
+
+        const ctx = this.ctx;
+
+        const text = `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`;        this.dragStartY = e.clientY - rect.top;        
+
+        
+
+        ctx.font = '12px sans-serif';        this.lastOffsetX = this.offsetX;        // 繪製座標標籤
+
+        const metrics = ctx.measureText(text);
+
+        const padding = 8;        this.lastOffsetY = this.offsetY;        this.ctx.fillStyle = '#64748b';
+
+        const width = metrics.width + padding * 2;
+
+        const height = 24;        this.canvas.style.cursor = 'grabbing';        this.ctx.font = `${10 / this.scale}px Arial`;
+
+
+
+        let x = point.canvasX + 10;    }        
+
+        let y = point.canvasY - 30;
+
+            // 經度標籤（底部）
+
+        // 防止超出邊界
+
+        if (x + width > this.canvas.width) x = point.canvasX - width - 10;    // 處理鼠標移動        for (let i = 0; i <= 4; i++) {
+
+        if (y < 0) y = point.canvasY + 20;
+
+    handleMouseMove(e) {            const lng = this.bounds.minLng + (this.bounds.maxLng - this.bounds.minLng) * (i / 4);
+
+        // 繪製背景
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';        const rect = this.canvas.getBoundingClientRect();            const pos = this.latLngToPixel(this.bounds.minLat, lng);
+
+        ctx.fillRect(x, y, width, height);
+
+        this.mouseX = e.clientX - rect.left;            this.ctx.fillText(lng.toFixed(2), pos.x + 5, this.canvas.height - 5);
+
+        // 繪製文字
+
+        ctx.fillStyle = '#ffffff';        this.mouseY = e.clientY - rect.top;        }
+
+        ctx.textAlign = 'center';
+
+        ctx.textBaseline = 'middle';                
+
+        ctx.fillText(text, x + width / 2, y + height / 2);
+
+    }        if (this.isDragging) {        // 緯度標籤（左側）
+
+
+
+    // 計算距離 (Haversine公式)            // 拖動地圖        for (let i = 0; i <= 4; i++) {
+
+    calculateDistance(lat1, lng1, lat2, lng2) {
+
+        const R = 6371; // 地球半徑 (km)            const dx = this.mouseX - this.dragStartX;            const lat = this.bounds.maxLat - (this.bounds.maxLat - this.bounds.minLat) * (i / 4);
+
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+
+        const dLng = (lng2 - lng1) * Math.PI / 180;            const dy = this.mouseY - this.dragStartY;            const pos = this.latLngToPixel(lat, this.bounds.minLng);
+
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *            this.offsetX = this.lastOffsetX + dx;            this.ctx.fillText(lat.toFixed(2), 5, pos.y + 15);
+
+                  Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));            this.offsetY = this.lastOffsetY + dy;        }
+
+        return R * c;
+
+    }            this.draw();    }
+
+
+
+    // 事件處理        } else if (this.currentMode) {    
+
+    handleClick(e) {
+
+        if (this.isDragging) return;            // 選擇模式：顯示懸停提示    drawPresetLocations() {
+
+
+
+        const rect = this.canvas.getBoundingClientRect();            this.showHoverTip = true;        this.presetLocations.forEach(location => {
+
+        const canvasX = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+
+        const canvasY = (e.clientY - rect.top) * (this.canvas.height / rect.height);            this.draw();            const pos = this.latLngToPixel(location.lat, location.lng);
+
+
+
+        const { lat, lng } = this.canvasToLatLng(canvasX, canvasY);        }            
+
+
+
+        // 檢查是否點擊預設地點    }            // 繪製背景圓圈
+
+        for (const location of this.presetLocations) {
+
+            const pos = this.latLngToCanvas(location.lat, location.lng);                this.ctx.beginPath();
+
+            const dist = Math.sqrt((canvasX - pos.x) ** 2 + (canvasY - pos.y) ** 2);
+
+                // 處理鼠標釋放            this.ctx.arc(pos.x, pos.y, 20 / this.scale, 0, 2 * Math.PI);
+
+            if (dist < 15) {
+
+                // 點擊預設地點    handleMouseUp(e) {            this.ctx.fillStyle = location.color;
+
+                if (this.isSelectingStart) {
+
+                    this.startMarker = { lat: location.lat, lng: location.lng };        this.isDragging = false;            this.ctx.globalAlpha = 0.2;
+
+                    this.onStartSelect(location.lat, location.lng);
+
+                    this.isSelectingStart = false;        this.canvas.style.cursor = this.currentMode ? 'crosshair' : 'default';            this.ctx.fill();
+
+                } else if (this.isSelectingEnd) {
+
+                    this.endMarker = { lat: location.lat, lng: location.lng };    }            this.ctx.globalAlpha = 1;
+
+                    this.onEndSelect(location.lat, location.lng);
+
+                    this.isSelectingEnd = false;                
+
+                }
+
+                this.draw();    // 處理鼠標離開            // 繪製圖標
+
+                return;
+
+            }    handleMouseLeave(e) {            this.ctx.font = `${16 / this.scale}px Arial`;
+
+        }
+
+        this.isDragging = false;            this.ctx.textAlign = 'center';
+
+        // 檢查邊界
+
+        if (lat < this.bounds.minLat || lat > this.bounds.maxLat ||         this.showHoverTip = false;            this.ctx.textBaseline = 'middle';
+
+            lng < this.bounds.minLng || lng > this.bounds.maxLng) {
+
+            return;        this.canvas.style.cursor = 'default';            this.ctx.fillText(location.icon, pos.x, pos.y);
+
+        }
+
+        this.draw();            
+
+        // 設定標記
+
+        if (this.isSelectingStart) {    }            // 繪製名稱
+
+            this.startMarker = { lat, lng };
+
+            this.onStartSelect(lat, lng);                this.ctx.font = `bold ${11 / this.scale}px Arial`;
+
+            this.isSelectingStart = false;
+
+        } else if (this.isSelectingEnd) {    // 處理點擊            this.ctx.fillStyle = '#1f2937';
+
+            this.endMarker = { lat, lng };
+
+            this.onEndSelect(lat, lng);    handleClick(e) {            this.ctx.fillText(location.name, pos.x, pos.y + 25 / this.scale);
+
+            this.isSelectingEnd = false;
+
+        }        if (this.isDragging) return;        });
+
+
+
+        this.draw();        if (!this.currentMode) return;    }
+
+    }
+
+            
+
+    handleMouseMove(e) {
+
+        const rect = this.canvas.getBoundingClientRect();        const rect = this.canvas.getBoundingClientRect();    drawMarker(position, color, label, icon) {
+
+        const canvasX = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+
+        const canvasY = (e.clientY - rect.top) * (this.canvas.height / rect.height);        const x = e.clientX - rect.left;        // 繪製陰影
+
+
+
+        if (this.isDragging) {        const y = e.clientY - rect.top;        this.ctx.beginPath();
+
+            const dx = e.clientX - this.dragStartX;
+
+            const dy = e.clientY - this.dragStartY;                this.ctx.arc(position.x, position.y + 3 / this.scale, 18 / this.scale, 0, 2 * Math.PI);
+
+            this.offsetX = this.dragStartOffsetX + dx * (this.canvas.width / rect.width);
+
+            this.offsetY = this.dragStartOffsetY + dy * (this.canvas.height / rect.height);        // 檢查是否點擊了預設地標        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+
+            this.draw();
+
+            return;        for (const location of this.presetLocations) {        this.ctx.fill();
+
+        }
 
             const pos = this.latLngToPixel(location.lat, location.lng);        
 
-            const distance = Math.sqrt(Math.pow(x - pos.x, 2) + Math.pow(y - pos.y, 2));        // 繪製標記圓圈
+        // 更新懸停座標
 
-                    this.ctx.beginPath();
+        const { lat, lng } = this.canvasToLatLng(canvasX, canvasY);            const distance = Math.sqrt(Math.pow(x - pos.x, 2) + Math.pow(y - pos.y, 2));        // 繪製標記圓圈
 
-            if (distance < 20) {        this.ctx.arc(position.x, position.y, 18 / this.scale, 0, 2 * Math.PI);
+        if (lat >= this.bounds.minLat && lat <= this.bounds.maxLat &&
 
-                // 點擊了地標        this.ctx.fillStyle = color;
+            lng >= this.bounds.minLng && lng <= this.bounds.maxLng) {                    this.ctx.beginPath();
 
-                this.selectLocation(location.lat, location.lng, location.name);        this.ctx.fill();
+            this.hoveredPoint = { lat, lng, canvasX, canvasY };
+
+        } else {            if (distance < 20) {        this.ctx.arc(position.x, position.y, 18 / this.scale, 0, 2 * Math.PI);
+
+            this.hoveredPoint = null;
+
+        }                // 點擊了地標        this.ctx.fillStyle = color;
+
+
+
+        this.draw();                this.selectLocation(location.lat, location.lng, location.name);        this.ctx.fill();
+
+    }
 
                 return;        this.ctx.strokeStyle = 'white';
 
-            }        this.ctx.lineWidth = 4 / this.scale;
+    handleMouseDown(e) {
 
-        }        this.ctx.stroke();
+        this.isDragging = true;            }        this.ctx.lineWidth = 4 / this.scale;
 
-                
+        this.dragStartX = e.clientX;
 
-        // 點擊了空白處：轉換為經緯度        // 繪製圖標
+        this.dragStartY = e.clientY;        }        this.ctx.stroke();
 
-        const coords = this.pixelToLatLng(x, y);        this.ctx.font = `${16 / this.scale}px Arial`;
+        this.dragStartOffsetX = this.offsetX;
 
-                this.ctx.textAlign = 'center';
+        this.dragStartOffsetY = this.offsetY;                
+
+        this.canvas.style.cursor = 'grabbing';
+
+    }        // 點擊了空白處：轉換為經緯度        // 繪製圖標
+
+
+
+    handleMouseUp(e) {        const coords = this.pixelToLatLng(x, y);        this.ctx.font = `${16 / this.scale}px Arial`;
+
+        this.isDragging = false;
+
+        this.canvas.style.cursor = this.isSelectingStart || this.isSelectingEnd ? 'crosshair' : 'grab';                this.ctx.textAlign = 'center';
+
+    }
 
         // 檢查邊界        this.ctx.textBaseline = 'middle';
 
-        if (coords.lat < this.bounds.south || coords.lat > this.bounds.north ||        this.ctx.fillStyle = 'white';
+    handleMouseLeave(e) {
 
-            coords.lng < this.bounds.west || coords.lng > this.bounds.east) {        this.ctx.fillText(icon, position.x, position.y);
+        this.isDragging = false;        if (coords.lat < this.bounds.south || coords.lat > this.bounds.north ||        this.ctx.fillStyle = 'white';
 
-            return;        
+        this.hoveredPoint = null;
 
-        }        // 繪製標籤背景
+        this.canvas.style.cursor = 'crosshair';            coords.lng < this.bounds.west || coords.lng > this.bounds.east) {        this.ctx.fillText(icon, position.x, position.y);
 
-                this.ctx.font = `bold ${12 / this.scale}px Arial`;
+        this.draw();
 
-        this.selectLocation(coords.lat, coords.lng);        const metrics = this.ctx.measureText(label);
+    }            return;        
+
+
+
+    handleWheel(e) {        }        // 繪製標籤背景
+
+        e.preventDefault();
+
+                        this.ctx.font = `bold ${12 / this.scale}px Arial`;
+
+        const rect = this.canvas.getBoundingClientRect();
+
+        const mouseX = (e.clientX - rect.left) * (this.canvas.width / rect.width);        this.selectLocation(coords.lat, coords.lng);        const metrics = this.ctx.measureText(label);
+
+        const mouseY = (e.clientY - rect.top) * (this.canvas.height / rect.height);
 
     }        const padding = 8 / this.scale;
 
-            const labelWidth = metrics.width + padding * 2;
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
 
-    // 選擇位置        const labelHeight = 22 / this.scale;
+        const newScale = Math.max(0.5, Math.min(3, this.scale * delta));            const labelWidth = metrics.width + padding * 2;
 
-    selectLocation(lat, lng, name = null) {        const labelX = position.x - labelWidth / 2;
+
+
+        // 以滑鼠位置為中心縮放    // 選擇位置        const labelHeight = 22 / this.scale;
+
+        this.offsetX = mouseX - (mouseX - this.offsetX) * (newScale / this.scale);
+
+        this.offsetY = mouseY - (mouseY - this.offsetY) * (newScale / this.scale);    selectLocation(lat, lng, name = null) {        const labelX = position.x - labelWidth / 2;
+
+        this.scale = newScale;
 
         const marker = {        const labelY = position.y - 40 / this.scale;
 
-            lat: lat,        
+        this.draw();
 
-            lng: lng,        // 繪製標籤陰影
+    }            lat: lat,        
 
-            name: name        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
 
-        };        this.ctx.fillRect(labelX + 2 / this.scale, labelY + 2 / this.scale, labelWidth, labelHeight);
+
+    // 公開方法            lng: lng,        // 繪製標籤陰影
+
+    setSelectingStart(value) {
+
+        this.isSelectingStart = value;            name: name        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+
+        this.isSelectingEnd = false;
+
+        this.canvas.style.cursor = value ? 'crosshair' : 'grab';        };        this.ctx.fillRect(labelX + 2 / this.scale, labelY + 2 / this.scale, labelWidth, labelHeight);
+
+    }
 
                 
 
-        if (this.currentMode === 'start') {        // 繪製標籤背景
+    setSelectingEnd(value) {
 
-            this.startMarker = marker;        this.ctx.fillStyle = color;
+        this.isSelectingEnd = value;        if (this.currentMode === 'start') {        // 繪製標籤背景
+
+        this.isSelectingStart = false;
+
+        this.canvas.style.cursor = value ? 'crosshair' : 'grab';            this.startMarker = marker;        this.ctx.fillStyle = color;
+
+    }
 
             this.onLocationSelected('start', lat, lng);        this.ctx.fillRect(labelX, labelY, labelWidth, labelHeight);
 
-        } else if (this.currentMode === 'end') {        
+    reset() {
 
-            this.endMarker = marker;        // 繪製標籤文字
+        this.startMarker = null;        } else if (this.currentMode === 'end') {        
 
-            this.onLocationSelected('end', lat, lng);        this.ctx.fillStyle = 'white';
+        this.endMarker = null;
 
-        }        this.ctx.textAlign = 'center';
+        this.scale = 1;            this.endMarker = marker;        // 繪製標籤文字
+
+        this.offsetX = 0;
+
+        this.offsetY = 0;            this.onLocationSelected('end', lat, lng);        this.ctx.fillStyle = 'white';
+
+        this.draw();
+
+    }        }        this.ctx.textAlign = 'center';
+
+}
 
                 this.ctx.fillText(label, position.x, labelY + labelHeight / 2 + 1 / this.scale);
 
