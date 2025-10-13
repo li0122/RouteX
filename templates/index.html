@@ -25,36 +25,23 @@
                 </h2>
 
                 <form id="recommendForm">
-                    <!-- 偏好類別 -->
+                    <!-- 活動需求輸入 -->
                     <div class="form-group">
                         <label>
-                            <i class="fas fa-heart"></i> 偏好類別 (可多選)
+                            <i class="fas fa-bullseye"></i> 您想做什麼？
                         </label>
-                        <div class="category-grid">
-                            <div class="category-chip" data-category="Restaurant">
-                                <i class="fas fa-utensils"></i> 餐廳
-                            </div>
-                            <div class="category-chip" data-category="Cafe">
-                                <i class="fas fa-coffee"></i> 咖啡廳
-                            </div>
-                            <div class="category-chip" data-category="Museum">
-                                <i class="fas fa-landmark"></i> 博物館
-                            </div>
-                            <div class="category-chip" data-category="Park">
-                                <i class="fas fa-tree"></i> 公園
-                            </div>
-                            <div class="category-chip" data-category="Shopping">
-                                <i class="fas fa-shopping-bag"></i> 購物
-                            </div>
-                            <div class="category-chip" data-category="Tourist Attraction">
-                                <i class="fas fa-camera"></i> 景點
-                            </div>
-                            <div class="category-chip" data-category="Bar">
-                                <i class="fas fa-glass-martini"></i> 酒吧
-                            </div>
-                            <div class="category-chip" data-category="Entertainment">
-                                <i class="fas fa-film"></i> 娛樂
-                            </div>
+                        <input 
+                            type="text" 
+                            id="activityIntent" 
+                            placeholder="例如：喝咖啡、吃義大利菜、看博物館、買紀念品、欣賞風景..." 
+                            style="width: 100%; padding: 12px 16px; font-size: 15px; border: 2px solid #e5e7eb; border-radius: 8px; box-sizing: border-box;"
+                        >
+                        <small style="color: #6b7280; margin-top: 8px; display: block;">
+                            💡 <strong>提示：</strong>描述得越具體，LLM 審核就越精準。例如：「喝咖啡」、「品嚐海鮮」、「購買藝術品」
+                        </small>
+                        <div style="margin-top: 12px; padding: 12px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;">
+                            <strong style="color: #92400e;">🔍 嚴格審核模式：</strong>
+                            <p style="color: #92400e; margin: 4px 0 0 0; font-size: 14px;">LLM 會嚴格檢查每個地點是否符合您的需求，只推薦最相關的地方</p>
                         </div>
                     </div>
 

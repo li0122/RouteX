@@ -140,6 +140,9 @@ function initForm() {
             return;
         }
         
+        // 獲取活動意圖
+        const activityIntent = document.getElementById('activityIntent').value.trim();
+        
         const topK = parseInt(document.getElementById('topK').value);
         const enableLLM = document.getElementById('enableLLM').checked;
         
@@ -147,7 +150,7 @@ function initForm() {
         const requestData = {
             start_location: startLocation,
             end_location: endLocation,
-            categories: selectedCategories,
+            activity_intent: activityIntent,  // 使用活動意圖代替類別
             top_k: topK,
             enable_llm: enableLLM
         };

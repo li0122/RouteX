@@ -181,27 +181,58 @@ class SimpleLLMFilter:
         return approved_pois[:target_k]
     
     def _build_travel_relevance_prompt(self, poi: Dict[str, Any], user_categories: Optional[List[str]] = None) -> str:
-        """構建旅遊相關性判斷提示"""
+        """構建旅遊相關性判斷提示 - 嚴格審核版本"""
         poi_name = poi.get('name', '未知')
         poi_category = poi.get('primary_category', '未分類')
         poi_description = poi.get('description', '')
+        stars = poi.get('stars', 0)
+        review_count = poi.get('review_count', 0)
         
-        # 構建用戶偏好說明
-        user_preference_text = ""
+        # 如果有用戶活動意圖，使用嚴格的匹配邏輯
         if user_categories and len(user_categories) > 0:
-            categories_str = '、'.join(user_categories)
-            user_preference_text = f"""
-用戶偏好類別: {categories_str}
-（此POI如果屬於或相關於用戶偏好類別，應該更傾向判斷為"適合"）
-"""
-        
-        prompt = f"""你是一個專業的旅遊推薦系統專家。請判斷以下POI是否適合推薦給旅客。
+            user_intent = user_categories[0]  # 用戶的活動需求（如「喝咖啡」）
+            
+            prompt = f"""你是一個**非常嚴格**的旅遊推薦審核專家。用戶明確表示想要："{user_intent}"。
+
+請**嚴格審核**以下地點是否**直接符合**用戶的需求：
+
+名稱: {poi_name}
+類別: {poi_category}
+評分: {stars} 星 ({review_count} 評論)
+描述: {poi_description}
+
+**嚴格審核標準**：
+1. ✅ 只有當這個地點**主要提供**用戶想要的活動時，才回答 yes
+   - 例如：用戶想「喝咖啡」→ 咖啡廳、咖啡館 ✅ | 餐廳、酒吧 ❌
+   - 例如：用戶想「吃海鮮」→ 海鮮餐廳 ✅ | 一般餐廳、咖啡廳 ❌
+   - 例如：用戶想「看博物館」→ 博物館、美術館 ✅ | 公園、商店 ❌
+   - 例如：用戶想「吃義大利菜」→ 義大利餐廳 ✅ | 其他國家料理 ❌
+
+2. ❌ **拒絕**以下情況：
+   - 地點類別與用戶需求不直接相關
+   - 地點「也許可以」但不是主要用途
+   - 評分過低（< 3.0 星）或評論極少（< 5 個）
+   - 名稱看起來像住宅、辦公室、停車場等非商業場所
+
+3. 🔍 **特別注意**：
+   - 用戶說「喝咖啡」就**只推薦**咖啡廳/咖啡館
+   - 不要推薦「也可以喝到咖啡」的餐廳或酒吧
+   - 寧可錯殺不可放過，保持高標準
+   - 類別名稱必須**直接包含**或**明確相關**於用戶需求
+
+**只回答 yes 或 no。如果不確定，請回答 no。**
+
+答案:"""
+        else:
+            # 沒有特定需求時，使用一般審核標準
+            prompt = f"""你是一個旅遊推薦專家。請判斷以下POI是否適合作為旅遊推薦：
 
 POI資訊:
 - 名稱: {poi_name}
 - 類別: {poi_category}
+- 評分: {stars} 星 ({review_count} 評論)
 - 描述: {poi_description}
-{user_preference_text}
+
 判斷標準：
 ✅ 適合旅客的POI:
 - 旅遊景點、博物館、公園
@@ -210,7 +241,6 @@ POI資訊:
 - 娛樂場所、劇院、遊樂園
 - 交通樞紐、機場、車站
 - 旅遊服務設施
-- **特別考慮：如果POI類別符合用戶偏好，應優先判斷為適合**
 
 ❌ 不適合旅客的POI:
 - 倉儲設施、自助倉庫
@@ -218,9 +248,9 @@ POI資訊:
 - 辦公大樓、私人住宅
 - 汽車維修、技術服務
 - 醫療診所（除非緊急）
-- 其他非旅遊相關的商業服務
+- 評分 < 3.0 星或評論 < 5 個
 
-請回答 "適合" 或 "不適合"，並簡述理由。
+請只回答 yes 或 no。
 
 答案:"""
         
@@ -266,30 +296,45 @@ POI資訊:
             return None
     
     def _parse_travel_relevance_response(self, response: str) -> bool:
-        """解析LLM回應"""
-        response_lower = response.lower()
+        """解析LLM回應 - 嚴格模式"""
+        if not response:
+            return False
+            
+        response_lower = response.lower().strip()
         
-        # 直接關鍵詞判斷
-        if '適合' in response:
+        # 優先檢查明確的 yes/no（嚴格模式）
+        if response_lower.startswith('yes') or response_lower == 'yes':
+            return True
+        elif response_lower.startswith('no') or response_lower == 'no':
+            return False
+        
+        # 中文適合/不適合
+        if '適合' in response and '不適合' not in response:
             return True
         elif '不適合' in response:
             return False
         
-        # 英文關鍵詞
-        positive_keywords = ['suitable', 'appropriate', 'relevant', 'good for', 'yes']
-        negative_keywords = ['not suitable', 'inappropriate', 'irrelevant', 'not good', 'no']
-        
-        for keyword in positive_keywords:
-            if keyword in response_lower:
-                return True
+        # 英文關鍵詞（更嚴格）
+        if 'yes' in response_lower and 'no' not in response_lower:
+            return True
+        elif 'no' in response_lower:
+            return False
+            
+        # 其他積極詞
+        positive_keywords = ['suitable', 'appropriate', 'relevant', 'recommend']
+        negative_keywords = ['not suitable', 'inappropriate', 'irrelevant', 'not recommend', 'reject']
         
         for keyword in negative_keywords:
             if keyword in response_lower:
                 return False
+                
+        for keyword in positive_keywords:
+            if keyword in response_lower:
+                return True
         
-        # 預設為適合（保守策略）
-        print(f"   ⚠️ 無法解析LLM回應，預設為適合: {response[:50]}")
-        return True
+        # 嚴格模式：無法解析則拒絕（寧可錯殺）
+        print(f"   ⚠️ 無法解析LLM回應，嚴格模式預設拒絕: {response[:50]}")
+        return False
     
     def _fallback_travel_filter(self, poi: Dict[str, Any]) -> bool:
         """備用過濾邏輯 - 當LLM失敗時使用"""
