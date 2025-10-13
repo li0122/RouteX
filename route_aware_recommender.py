@@ -914,7 +914,7 @@ class RouteAwareRecommender:
         filter_start = time.time()
         
         filtered_pois = self._intelligent_prefilter(
-            candidate_pois, user_history, max_candidates=50
+            candidate_pois, user_history, max_candidates=200
         )
         
         filter_time = time.time() - filter_start
