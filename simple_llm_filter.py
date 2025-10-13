@@ -203,78 +203,78 @@ class SimpleLLMFilter:
         if user_categories and len(user_categories) > 0:
             user_intent = user_categories[0]  # 用戶的活動需求（如「喝咖啡」）
             
-            prompt = f"""你是一個**非常嚴格**的旅遊推薦審核專家。用戶明確表示想要："{user_intent}"。
+            prompt = f"""You are a **very strict** travel recommendation auditor. The user explicitly states they want: "{user_intent}".
 
-請**嚴格審核**以下地點是否**直接符合**用戶的需求：
+Please **strictly evaluate** whether the following place **directly satisfies** the user's request:
 
-名稱: {poi_name}
-類別: {poi_category}
-評分: {stars} 星 ({review_count} 評論)
-描述: {poi_description}
+Name: {poi_name}
+Category: {poi_category}
+Rating: {stars} stars ({review_count} reviews)
+Description: {poi_description}
 
-**嚴格審核標準**：
-1. 只有當這個地點**主要提供**用戶想要的活動時，才能通過
-   - 例如：用戶想「喝咖啡」→ 咖啡廳、咖啡館 ✅ | 餐廳、酒吧 ❌
-   - 例如：用戶想「吃海鮮」→ 海鮮餐廳 ✅ | 一般餐廳、咖啡廳 ❌
-   - 例如：用戶想「看博物館」→ 博物館、美術館 ✅ | 公園、商店 ❌
-   - 例如：用戶想「吃義大利菜」→ 義大利餐廳 ✅ | 其他國家料理 ❌
+**Strict evaluation criteria**:
+1. Only accept when the place **primarily offers** the activity the user wants.
+   - Example: user wants “drink coffee” → cafe, coffee shop ACCEPT | restaurant, bar REJECT
+   - Example: user wants “eat seafood” → seafood restaurant ACCEPT | general restaurant, coffee shop REJECT
+   - Example: user wants “visit a museum” → museum, art gallery ACCEPT | park, shop REJECT
+   - Example: user wants “eat Italian” → Italian restaurant ACCEPT | other cuisines REJECT
 
-2. **自動拒絕**以下情況：
-   - 地點類別與用戶需求不直接相關
-   - 地點「也許可以」但不是主要用途
-   - 評分過低（< 3.0 星）或評論極少（< 5 個）
-   - 名稱看起來像住宅、辦公室、停車場等非商業場所
+2. **Automatically REJECT** in the following cases:
+   - The place’s category is not directly related to the user’s need.
+   - The place “might work” but it is not the primary purpose.
+   - Rating is too low (< 3.0 stars) or there are very few reviews (< 5).
+   - The name appears to be a residence, office, parking lot, or other non-commercial site.
 
-3. **特別注意**：
-   - 類別名稱必須**直接包含**或**明確相關**於用戶需求
-   - 寧可錯殺不可放過，保持高標準
+3. **Special notes**:
+   - The category name must **directly include** or be **clearly relevant** to the user’s need.
+   - Better to wrongly reject than to wrongly accept—maintain a high standard.
 
-**請按照以下格式回答（必須嚴格遵守此格式）：**
+**Reply using the exact format below (you must follow this format strictly):**
 
-決策: [ACCEPT 或 REJECT]
-評分: [0-10 的數字，表示與用戶需求的匹配度]
-理由: [詳細說明為什麼通過或拒絕，具體分析地點類別與用戶需求的關係]
+Decision: [ACCEPT or REJECT]
+Score: [a number 0–10 indicating how well it matches the user’s need]
+Reason: [detailed explanation why you accepted or rejected, analyzing the place’s category in relation to the user’s need]
 
-範例回答：
-決策: REJECT
-評分: 3
-理由: 雖然這是一家餐廳可能也提供咖啡，但用戶明確想要「喝咖啡」，應該推薦專業的咖啡廳，而非一般餐廳。類別不匹配。
+Example answer:
+Decision: REJECT
+Score: 3
+Reason: Although this is a restaurant that may serve coffee, the user explicitly wants to “drink coffee” and therefore a professional coffee shop should be recommended rather than a general restaurant. Category mismatch.
 
-現在請審核:"""
+Now please evaluate:"""
         else:
             # 沒有特定需求時，使用一般審核標準
-            prompt = f"""你是一個旅遊推薦專家。請判斷以下POI是否適合作為旅遊推薦：
+            prompt = f"""You are a travel recommendation expert. Please determine whether the following POI is suitable for travel recommendation:
 
-POI資訊:
-- 名稱: {poi_name}
-- 類別: {poi_category}
-- 評分: {stars} 星 ({review_count} 評論)
-- 描述: {poi_description}
+POI Information:
+- Name: {poi_name}
+- Category: {poi_category}
+- Rating: {stars} stars ({review_count} reviews)
+- Description: {poi_description}
 
-判斷標準：
-✅ 適合旅客的POI:
-- 旅遊景點、博物館、公園
-- 餐廳、咖啡館、購物中心
-- 酒店、民宿等住宿
-- 娛樂場所、劇院、遊樂園
-- 交通樞紐、機場、車站
-- 旅遊服務設施
+Evaluation Criteria:
+Suitable POIs for travelers:
+- Tourist attractions, museums, parks
+- Restaurants, cafes, shopping centers
+- Hotels, inns, and other accommodations
+- Entertainment venues, theaters, amusement parks
+- Transportation hubs, airports, train/bus stations
+- Tourism service facilities
 
-❌ 不適合旅客的POI:
-- 倉儲設施、自助倉庫
-- 工業設施、工廠
-- 辦公大樓、私人住宅
-- 汽車維修、技術服務
-- 醫療診所（除非緊急）
-- 評分 < 3.0 星或評論 < 5 個
+Unsuitable POIs for travelers:
+- Storage facilities, self-storage units
+- Industrial sites, factories
+- Office buildings, private residences
+- Auto repair shops, technical services
+- Medical clinics (except for emergencies)
+- Rating < 3.0 stars or reviews < 5
 
-**請按照以下格式回答：**
+**Please respond in the following format:**
 
-決策: [ACCEPT 或 REJECT]
-評分: [0-10 的數字，表示作為旅遊推薦的適合度]
-理由: [詳細說明為什麼適合或不適合作為旅遊推薦]
+Decision: [ACCEPT or REJECT]
+Score: [a number from 0–10 indicating how suitable this POI is for travel recommendation]
+Reason: [detailed explanation of why it is or isn’t suitable as a travel recommendation]
 
-現在請審核:"""
+Now please evaluate:"""
         
         return prompt
     

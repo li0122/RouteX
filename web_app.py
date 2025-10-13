@@ -132,14 +132,26 @@ def recommend():
         print(f"\n📍 收到推薦請求:")
         print(f"   起點: {start_location}")
         print(f"   終點: {end_location}")
+        
+        # 獲取活動意圖
+        activity_intent = data.get('activity_intent', '').strip()
+        if activity_intent:
+            print(f"   活動意圖: {activity_intent} (嚴格審核模式)")
+        
         print(f"   類別偏好: {categories}")
         print(f"   推薦數量: {top_k}")
         print(f"   LLM過濾: {enable_llm}")
         
-        # 構建用戶歷史（可以根據類別偏好構建）
+        # 構建用戶歷史
         user_history = []
-        if categories:
-            # 為每個偏好類別創建虛擬歷史記錄
+        if activity_intent:
+            # 如果有活動意圖，優先使用它（嚴格審核）
+            user_history.append({
+                'category': activity_intent,
+                'rating': 5
+            })
+        elif categories:
+            # 否則使用類別偏好
             for category in categories:
                 user_history.append({
                     'category': category,
