@@ -31,7 +31,7 @@ class SimpleLLMFilter:
             'Accept': 'application/json'
         })
         
-        print(f"🤖 LLM過濾器初始化完成")
+        print(f"LLM過濾器初始化完成")
         print(f"   端點: {self.base_url}")
         print(f"   模型: {self.model}")
     
@@ -80,7 +80,7 @@ class SimpleLLMFilter:
         if not pois:
             return []
         
-        print(f"🔍 開始LLM旅遊相關性過濾...")
+        print(f"開始LLM旅遊相關性過濾...")
         print(f"   輸入POI數量: {len(pois)}")
         if user_categories:
             print(f"   用戶偏好類別: {', '.join(user_categories)}")
@@ -98,20 +98,20 @@ class SimpleLLMFilter:
             
             if is_relevant:
                 filtered_pois.append(poi)
-                print(f"     ✅ 通過 - 評分: {score:.1f}/10")
-                print(f"     💡 理由: {reason}")
+                print(f"     ACCEPT - 評分: {score:.1f}/10")
+                print(f"     REASON: {reason}")
             else:
                 rejected_count += 1
-                print(f"     ❌ 拒絕 - 評分: {score:.1f}/10")
-                print(f"     💡 理由: {reason}")
+                print(f"     REJECTED - 評分: {score:.1f}/10")
+                print(f"     REASON: {reason}")
             
             # 控制請求頻率
             if i < len(pois):  # 不是最後一個
                 time.sleep(self.delay_between_requests)
         
-        print(f"✅ LLM過濾完成!")
-        print(f"   通過: {len(filtered_pois)} 個")
-        print(f"   拒絕: {rejected_count} 個")
+        print(f"LLM過濾完成!")
+        print(f"ACCEPT: {len(filtered_pois)} 個")
+        print(f"REJECTED: {rejected_count} 個")
         
         return filtered_pois
     
@@ -120,21 +120,25 @@ class SimpleLLMFilter:
         ranked_pois: List[Dict[str, Any]], 
         target_k: int,
         multiplier: int = 3,
-        user_categories: Optional[List[str]] = None
+        user_categories: Optional[List[str]] = None,
+        early_stop: bool = True,
+        early_stop_buffer: float = 1.5
     ) -> List[Dict[str, Any]]:
         """
-        按排序逐一審核，直到收集到target_k個通過的POI
+        按排序逐一審核，直到收集到target_k個通過的POI（支持早停）
         
         這是您要求的核心功能：
         1. 從第1名開始逐一審核
         2. 通過LLM審核的加入最終列表
-        3. 直到收集到TOP K個為止
+        3. 收集到足夠多的候選後早停（可配置）
         
         Args:
             ranked_pois: 已排序的POI列表
             target_k: 目標數量
             multiplier: 初始搜索倍數（搜索前 target_k * multiplier 個）
             user_categories: 用戶偏好的類別列表（可選）
+            early_stop: 是否啟用早停（默認True）
+            early_stop_buffer: 早停緩衝倍數（默認1.5，即收集到 target_k * 1.5 個後停止）
             
         Returns:
             通過LLM審核的TOP K POI列表
@@ -142,10 +146,16 @@ class SimpleLLMFilter:
         if not ranked_pois:
             return []
         
-        print(f"🎯 開始逐一LLM審核流程")
+        # 計算早停閾值
+        early_stop_threshold = int(target_k * early_stop_buffer) if early_stop else float('inf')
+        
+        print(f"開始逐一LLM審核流程")
         print(f"   目標: TOP {target_k} 推薦")
         print(f"   輸入: {len(ranked_pois)} 個排序POI")
-        print(f"   審核範圍: 全部 {len(ranked_pois)} 個候選（不早停）")
+        if early_stop:
+            print(f"   早停策略: 收集到 {early_stop_threshold} 個候選後停止 ({early_stop_buffer}x buffer)")
+        else:
+            print(f"   審核範圍: 全部 {len(ranked_pois)} 個候選（不早停）")
         if user_categories:
             print(f"   用戶偏好類別: {', '.join(user_categories)}")
         
@@ -154,26 +164,33 @@ class SimpleLLMFilter:
         
         print()
         
-        # 從第1名開始逐一審核 - 不早停，審核完所有候選
+        # 從第1名開始逐一審核 - 支持早停
         for rank, poi in enumerate(ranked_pois, 1):
+            # 早停檢查：收集到足夠多的候選後停止
+            if early_stop and len(approved_pois) >= early_stop_threshold:
+                print(f"\n早停觸發！")
+                print(f"   已收集 {len(approved_pois)} 個候選（目標 {target_k} 個）")
+                print(f"   停止審核，節省 {len(ranked_pois) - rank + 1} 次 LLM 調用")
+                break
+            
             poi_name = poi.get('name', '未知POI')
             poi_category = poi.get('primary_category', '未分類')
             rating = poi.get('avg_rating', 0)
             
-            print(f"🔍 審核第 {rank}/{len(ranked_pois)} 名: {poi_name}")
+            print(f"審核第 {rank}/{len(ranked_pois)} 名: {poi_name}")
             print(f"   類別: {poi_category} | 評分: {rating:.1f}⭐")
             
             # LLM審核（獲取詳細理由）
             is_relevant, reason, llm_score = self.is_travel_relevant(poi, user_categories)
             
-            print(f"   📊 LLM評分: {llm_score:.1f}/10")
-            print(f"   💭 審核理由: {reason}")
+            print(f"  LLM評分: {llm_score:.1f}/10")
+            print(f"  理由: {reason}")
             
             if is_relevant:
                 approved_pois.append(poi)
-                print(f"   ✅ 通過審核! (已收集 {len(approved_pois)} 個)")
+                print(f"ACCEPT (已收集 {len(approved_pois)}/{early_stop_threshold if early_stop else 'inf'} 個)")
             else:
-                print(f"   ❌ 審核未通過")
+                print(f"REJECTED")
             
             print()
             
@@ -183,10 +200,12 @@ class SimpleLLMFilter:
         
         # 最終結果
         final_count = len(approved_pois)
-        print(f"\n🏆 最終結果:")
-        print(f"   審核完成: {len(ranked_pois)} 個POI")
+        print(f"\n最終結果:")
+        print(f"   審核完成: {rank} 個POI")
         print(f"   通過審核: {final_count} 個POI")
         print(f"   返回前 {target_k} 名")
+        if early_stop and final_count > target_k:
+            print(f"   節省時間: 跳過 {len(ranked_pois) - rank} 次審核")
         
         # 返回前K個通過審核的POI
         return approved_pois[:target_k]
@@ -376,12 +395,12 @@ Now please evaluate:"""
                     # 無法判斷，嚴格模式預設拒絕
                     decision = False
                     reason = f"無法解析決策，預設拒絕。原始回應: {response[:100]}"
-                    print(f"   ⚠️ 無法解析結構化回應: {response[:100]}")
+                    print(f"WARNING: 無法解析結構化回應: {response[:100]}")
             
             return decision, reason, score
             
         except Exception as e:
-            print(f"   ⚠️ 解析LLM回應時出錯: {e}")
+            print(f"WARNING: 解析LLM回應時出錯: {e}")
             return False, f"解析錯誤: {str(e)}", 0.0
     
     def _fallback_travel_filter(self, poi: Dict[str, Any]) -> bool:
@@ -424,7 +443,7 @@ Now please evaluate:"""
 # 測試函數
 def test_llm_filter():
     """測試LLM過濾器"""
-    print("🧪 測試LLM過濾器")
+    print("測試LLM過濾器")
     
     # 創建過濾器
     llm_filter = SimpleLLMFilter()
@@ -451,17 +470,17 @@ def test_llm_filter():
         }
     ]
     
-    print(f"\n📋 測試POI列表:")
+    print(f"\n測試POI列表:")
     for i, poi in enumerate(test_pois, 1):
         print(f"  {i}. {poi['name']} ({poi['primary_category']})")
     
     # 測試逐一審核
-    print(f"\n🎯 測試逐一審核功能:")
+    print(f"\n測試逐一審核功能:")
     approved = llm_filter.sequential_llm_filter_top_k(test_pois, target_k=2)
     
-    print(f"\n📊 最終結果:")
+    print(f"\n最終結果:")
     for i, poi in enumerate(approved, 1):
-        print(f"  {i}. {poi['name']} - ✅ 通過審核")
+        print(f"  {i}. {poi['name']} - 通過審核")
 
 
 if __name__ == "__main__":

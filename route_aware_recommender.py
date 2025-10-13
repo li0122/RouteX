@@ -914,7 +914,7 @@ class RouteAwareRecommender:
         filter_start = time.time()
         
         filtered_pois = self._intelligent_prefilter(
-            candidate_pois, user_history, max_candidates=200
+            candidate_pois, user_history, max_candidates=50
         )
         
         filter_time = time.time() - filter_start
@@ -1389,12 +1389,14 @@ class RouteAwareRecommender:
             # 提取POI用於LLM審核
             ranked_pois = [rec['poi'] for rec in recommendations]
             
-            # 使用LLM逐一審核，直到收集到target_k個通過的POI
+            # 使用LLM逐一審核，直到收集到足夠多的通過候選（支持早停）
             approved_pois = self.llm_filter.sequential_llm_filter_top_k(
                 ranked_pois, 
                 target_k=top_k,
                 multiplier=3,  # 搜索前 top_k * 3 個候選
-                user_categories=user_categories if user_categories else None
+                user_categories=user_categories if user_categories else None,
+                early_stop=True,  # 啟用早停
+                early_stop_buffer=1.5  # 收集到 top_k * 1.5 個候選後停止
             )
             
             # 重新構建推薦結果（保持原始分數和詳細資訊）
