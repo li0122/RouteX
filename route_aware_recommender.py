@@ -963,7 +963,7 @@ class RouteAwareRecommender:
         self,
         candidates: List[Dict],
         user_history: List[Dict],
-        max_candidates: int = 50
+        max_candidates: int = 200
     ) -> List[Dict]:
         """
         智能預過濾候選POI - 改進版
