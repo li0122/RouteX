@@ -1468,6 +1468,62 @@ Do NOT include explanations, just return the comma-separated category list."""
         
         return R * c
     
+    def _point_to_line_distance(
+        self,
+        point: Tuple[float, float],
+        line_start: Tuple[float, float],
+        line_end: Tuple[float, float]
+    ) -> float:
+        """
+        計算點到線段的最短距離 (公里)
+        
+        Args:
+            point: POI 坐標 (lat, lng)
+            line_start: 起點坐標 (lat, lng)
+            line_end: 終點坐標 (lat, lng)
+        
+        Returns:
+            POI 到直線的垂直距離 (公里)
+        """
+        import math
+        
+        # 轉換為弧度
+        lat1, lon1 = math.radians(line_start[0]), math.radians(line_start[1])
+        lat2, lon2 = math.radians(line_end[0]), math.radians(line_end[1])
+        lat3, lon3 = math.radians(point[0]), math.radians(point[1])
+        
+        # 計算線段長度
+        line_length = self._haversine_distance(
+            line_start[0], line_start[1], line_end[0], line_end[1]
+        )
+        
+        if line_length < 0.001:  # 起點和終點太接近
+            return self._haversine_distance(
+                point[0], point[1], line_start[0], line_start[1]
+            )
+        
+        # 使用向量投影計算點到線段的距離
+        # 計算向量
+        dx = lon2 - lon1
+        dy = lat2 - lat1
+        
+        # 計算投影參數 t
+        t = ((lon3 - lon1) * dx + (lat3 - lat1) * dy) / (dx * dx + dy * dy)
+        
+        # 限制 t 在 [0, 1] 範圍內（確保投影點在線段上）
+        t = max(0, min(1, t))
+        
+        # 計算投影點坐標
+        proj_lat = math.degrees(lat1 + t * dy)
+        proj_lon = math.degrees(lon1 + t * dx)
+        
+        # 計算 POI 到投影點的距離
+        perpendicular_dist = self._haversine_distance(
+            point[0], point[1], proj_lat, proj_lon
+        )
+        
+        return perpendicular_dist
+    
     def _generate_recommendations(
         self,
         pois: List[Dict],
@@ -1621,19 +1677,39 @@ Do NOT include explanations, just return the comma-separated category list."""
             for key, values in poi_categorical_dict.items()
         }
         
-        # 準備路徑特徵
+        # 準備路徑特徵（使用 POI 到直線的距離）
         path_continuous_list = []
         for poi in pois:
             poi_location = (poi['latitude'], poi['longitude'])
-            detour = self.osrm_client.calculate_detour(
-                start_location, poi_location, end_location
+            
+            # 計算 POI 到起點-終點直線的垂直距離
+            perpendicular_dist = self._point_to_line_distance(
+                poi_location, start_location, end_location
             )
             
+            # 計算其他距離指標
+            dist_to_start = self._haversine_distance(
+                start_location[0], start_location[1],
+                poi_location[0], poi_location[1]
+            )
+            dist_to_end = self._haversine_distance(
+                poi_location[0], poi_location[1],
+                end_location[0], end_location[1]
+            )
+            direct_dist = self._haversine_distance(
+                start_location[0], start_location[1],
+                end_location[0], end_location[1]
+            )
+            
+            # 計算繞道比例
+            total_dist = dist_to_start + dist_to_end
+            detour_ratio = total_dist / direct_dist if direct_dist > 0 else 1.0
+            
             path_features = np.array([
-                min(detour['extra_distance'] / 10000.0, 1.0),  # 標準化
-                min(detour['extra_duration'] / 3600.0, 1.0),
-                min(detour['detour_ratio'] - 1.0, 1.0),
-                0.0  # 預留
+                min(perpendicular_dist / 50.0, 1.0),  # POI到直線距離（主要指標）
+                min(dist_to_start / 100.0, 1.0),      # 到起點距離
+                min(dist_to_end / 100.0, 1.0),        # 到終點距雩
+                min((detour_ratio - 1.0), 1.0)        # 繞道比例
             ], dtype=np.float32)
             
             path_continuous_list.append(path_features)
