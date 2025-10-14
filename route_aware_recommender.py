@@ -749,6 +749,7 @@ class RouteAwareRecommender:
         user_history: List[Dict],
         start_location: Tuple[float, float],
         end_location: Tuple[float, float],
+        user_needs: str = "旅遊探索",  # 新增：使用者需求
         candidate_pois: Optional[List[Dict]] = None,
         top_k: int = 10,
         max_detour_ratio: float = 1.3,
@@ -758,19 +759,20 @@ class RouteAwareRecommender:
         在路線上推薦景點 - 優化版
         
         主要優化:
-        1. 空間索引加速 POI 搜索
-        2. 智能預過濾減少無效計算
-        3. 異步 OSRM 查詢提高並發性
+        1. 地理邊界框過濾
+        2. LLM類別智能篩選
+        3. 模型評分和LLM審核
         
         Args:
             user_id: 用戶ID
             user_history: 用戶歷史記錄
             start_location: 起點 (lat, lon)
             end_location: 終點 (lat, lon)
+            user_needs: 使用者需求描述 (新增)
             candidate_pois: 候選POI列表 (None則自動搜索)
             top_k: 返回前K個推薦
-            max_detour_ratio: 最大繞道比例
-            max_extra_duration: 最大額外時間
+            max_detour_ratio: 最大繞道比例 (已棄用)
+            max_extra_duration: 最大額外時間 (已棄用)
         
         Returns:
             推薦結果列表
@@ -835,17 +837,137 @@ class RouteAwareRecommender:
                 print("⚠️ 即使放寬邊界框仍沒有POI")
                 return []
         
-        # 3. 異步路線過濾
-        if self.enable_async:
-            return asyncio.run(self._async_route_recommendation(
-                user_profile, filtered_pois, start_location, end_location,
-                top_k, max_detour_ratio, max_extra_duration, start_time, user_history
-            ))
-        else:
-            return self._sync_route_recommendation(
-                user_profile, filtered_pois, start_location, end_location,
-                top_k, max_detour_ratio, max_extra_duration, start_time, user_history
-            )
+        # 3. LLM類別篩選（取代OSRM路線過濾）
+        print("🤖 步驟3: LLM智能類別篩選...")
+        llm_start = time.time()
+        
+        # 提取所有唯一類別
+        all_categories = list(set([poi.get('primary_category', '') or poi.get('category', 'Unknown') 
+                                   for poi in filtered_pois if poi.get('primary_category') or poi.get('category')]))
+        all_categories = [cat for cat in all_categories if cat and cat != 'Unknown']
+        
+        print(f"   邊界框內共有 {len(all_categories)} 個不同類別")
+        print(f"   使用者需求: {user_needs}")
+        
+        # 使用LLM篩選符合需求的類別
+        selected_categories = self._llm_filter_categories(user_needs, all_categories)
+        
+        llm_time = time.time() - llm_start
+        print(f"   LLM篩選結果: {len(selected_categories)} 個類別")
+        print(f"   符合類別: {', '.join(selected_categories[:10])}{'...' if len(selected_categories) > 10 else ''}")
+        print(f"   耗時: {llm_time:.3f}s")
+        
+        if not selected_categories:
+            print("⚠️ 沒有符合的類別")
+            return []
+        
+        # 4. 根據篩選的類別更新POI列表
+        category_filtered_pois = [
+            poi for poi in filtered_pois 
+            if (poi.get('primary_category', '') in selected_categories or 
+                poi.get('category', '') in selected_categories)
+        ]
+        
+        print(f"   類別過濾後: {len(category_filtered_pois)} 個POI")
+        
+        if not category_filtered_pois:
+            print("⚠️ 沒有POI匹配篩選的類別")
+            return []
+        
+        # 5. 模型評分
+        print("🧠 步驟4: 模型評分...")
+        inference_start = time.time()
+        
+        scores = self._score_pois(
+            user_profile, category_filtered_pois, start_location, end_location
+        )
+        
+        inference_time = time.time() - inference_start
+        print(f"   模型評分完成 (耗時: {inference_time:.3f}s)")
+        
+        # 6. 生成推薦結果
+        recommendations = self._generate_recommendations(
+            category_filtered_pois, scores, None, top_k, user_profile, user_history,
+            start_location, end_location
+        )
+        
+        # 更新性能統計
+        total_time = time.time() - start_time
+        self._update_performance_stats(total_time)
+        
+        print(f"\n✅ 推薦完成! 總耗時: {total_time:.3f}s")
+        print(f"   最終推薦: {len(recommendations)} 個")
+        
+        return recommendations
+    
+    def _llm_filter_categories(
+        self,
+        user_needs: str,
+        all_categories: List[str]
+    ) -> List[str]:
+        """
+        使用LLM根據使用者需求篩選符合的商店類別
+        
+        Args:
+            user_needs: 使用者需求描述
+            all_categories: 所有商店類別列表
+        
+        Returns:
+            符合需求的類別列表
+        """
+        if not self.enable_llm_filter or not self.llm_filter:
+            print("⚠️ LLM過濾器不可用，返回所有類別")
+            return all_categories
+        
+        # 構建prompt
+        categories_str = ", ".join(all_categories[:100])  # 限制類別數量避免過長
+        if len(all_categories) > 100:
+            categories_str += f" ... (共 {len(all_categories)} 個類別)"
+        
+        prompt = f"""You are a travel recommendation assistant.
+
+User Needs: {user_needs}
+
+Available Categories:
+{categories_str}
+
+Task: Based on the user's needs, select ONLY the relevant categories from the list above that would be useful for their trip.
+
+Rules:
+1. Only return categories that directly match the user's needs
+2. Return categories as a comma-separated list
+3. Use the EXACT category names from the list
+4. If user needs are general (like "travel" or "tourism"), include tourist attractions, restaurants, hotels, shopping, etc.
+5. If user needs are specific (like "food" or "dining"), only include restaurants and food-related categories
+
+Output Format:
+Category1, Category2, Category3, ...
+
+Do NOT include explanations, just return the comma-separated category list."""
+        
+        try:
+            print("   調用LLM篩選類別...")
+            response = self.llm_filter._call_llm(prompt)
+            
+            if not response:
+                print("⚠️ LLM調用失敗，返回所有類別")
+                return all_categories
+            
+            # 解析LLM輸出
+            selected_categories = [cat.strip() for cat in response.split(',') if cat.strip()]
+            
+            # 驗證類別是否在原始列表中
+            valid_categories = [cat for cat in selected_categories if cat in all_categories]
+            
+            if not valid_categories:
+                print("⚠️ LLM返回的類別無效，使用所有類別")
+                return all_categories
+            
+            return valid_categories
+            
+        except Exception as e:
+            print(f"⚠️ LLM類別篩選失敗: {e}")
+            return all_categories
     
     def _filter_by_bounding_box(
         self,
