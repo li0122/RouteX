@@ -786,34 +786,56 @@ class RouteAwareRecommender:
             user_id, user_history
         )
         
-        # 2. 空間索引搜索候選POI
-        print("🗺️ 步驟2: 搜索候選POI...")
-        search_start = time.time()
-        
+        # 2. 獲取所有候選POI（不進行空間索引和預過濾，使篩選更全面）
         if candidate_pois is None:
-            candidate_pois = self._spatial_search_candidates(
-                start_location, end_location
-            )
+            # 直接使用所有POI
+            if hasattr(self.poi_processor, 'pois'):
+                if isinstance(self.poi_processor.pois, dict):
+                    candidate_pois = list(self.poi_processor.pois.values())
+                elif isinstance(self.poi_processor.pois, list):
+                    candidate_pois = self.poi_processor.pois
+                else:
+                    print(f"⚠️ 未知的pois數據類型: {type(self.poi_processor.pois)}")
+                    candidate_pois = []
+            else:
+                print("⚠️ poi_processor沒有pois屬性")
+                candidate_pois = []
         
-        search_time = time.time() - search_start
-        print(f"   搜索完成: {len(candidate_pois)} 個候選POI (耗時: {search_time:.3f}s)")
+        print(f"📊 使用全部 {len(candidate_pois)} 個POI進行篩選（未進行空間和預過濾）")
         
         if not candidate_pois:
             print("⚠️ 沒有找到候選POI")
             return []
         
-        # 3. 智能預過濾
-        print("⚡ 步驟3: 智能預過濾...")
-        filter_start = time.time()
+        # 2.5. 地理邊界框過濾（在路線過濾前）
+        print("📦 步驟2.5: 地理邊界框過濾...")
+        bbox_start = time.time()
         
-        filtered_pois = self._intelligent_prefilter(
-            candidate_pois, user_history, max_candidates=50
+        filtered_pois = self._filter_by_bounding_box(
+            candidate_pois, start_location, end_location, padding_ratio=0.1
         )
         
-        filter_time = time.time() - filter_start
-        print(f"   過濾完成: {len(filtered_pois)} 個高品質候選 (耗時: {filter_time:.3f}s)")
+        bbox_time = time.time() - bbox_start
+        filter_rate = (1 - len(filtered_pois) / len(candidate_pois)) * 100 if candidate_pois else 0
         
-        # 4. 異步路線過濾
+        print(f"   邊界框: 緯度 [{min(start_location[0], end_location[0]):.6f}, {max(start_location[0], end_location[0]):.6f}]")
+        print(f"           經度 [{min(start_location[1], end_location[1]):.6f}, {max(start_location[1], end_location[1]):.6f}]")
+        print(f"   矩形內POI: {len(filtered_pois)} 個（過濾掉 {len(candidate_pois) - len(filtered_pois)} 個，{filter_rate:.1f}%）")
+        print(f"   耗時: {bbox_time:.3f}s")
+        
+        if not filtered_pois:
+            print("⚠️ 地理邊界框內沒有POI，嘗試放寬範圍...")
+            # 如果過濾後沒有POI，放寬邊界框
+            filtered_pois = self._filter_by_bounding_box(
+                candidate_pois, start_location, end_location, padding_ratio=0.5
+            )
+            print(f"   放寬後POI: {len(filtered_pois)} 個")
+            
+            if not filtered_pois:
+                print("⚠️ 即使放寬邊界框仍沒有POI")
+                return []
+        
+        # 3. 異步路線過濾
         if self.enable_async:
             return asyncio.run(self._async_route_recommendation(
                 user_profile, filtered_pois, start_location, end_location,
@@ -824,6 +846,62 @@ class RouteAwareRecommender:
                 user_profile, filtered_pois, start_location, end_location,
                 top_k, max_detour_ratio, max_extra_duration, start_time, user_history
             )
+    
+    def _filter_by_bounding_box(
+        self,
+        pois: List[Dict],
+        start_location: Tuple[float, float],
+        end_location: Tuple[float, float],
+        padding_ratio: float = 0.1
+    ) -> List[Dict]:
+        """
+        地理邊界框過濾 - 只保留在起點和終點構成的矩形範圍內的POI
+        
+        Args:
+            pois: 候選POI列表
+            start_location: 起點 (lat, lng)
+            end_location: 終點 (lat, lng)
+            padding_ratio: 邊界框擴展比例（默認10%），避免邊緣POI被過濾
+        
+        Returns:
+            在矩形範圍內的POI列表
+        """
+        if not pois:
+            return []
+        
+        # 計算矩形邊界
+        min_lat = min(start_location[0], end_location[0])
+        max_lat = max(start_location[0], end_location[0])
+        min_lng = min(start_location[1], end_location[1])
+        max_lng = max(start_location[1], end_location[1])
+        
+        # 計算邊界框尺寸
+        lat_range = max_lat - min_lat
+        lng_range = max_lng - min_lng
+        
+        # 添加padding避免過於嚴格（擴展邊界框）
+        lat_padding = lat_range * padding_ratio
+        lng_padding = lng_range * padding_ratio
+        
+        min_lat -= lat_padding
+        max_lat += lat_padding
+        min_lng -= lng_padding
+        max_lng += lng_padding
+        
+        # 過濾POI
+        filtered = []
+        for poi in pois:
+            lat = poi.get('latitude')
+            lng = poi.get('longitude')
+            
+            if lat is None or lng is None:
+                continue
+            
+            # 檢查是否在矩形範圍內
+            if min_lat <= lat <= max_lat and min_lng <= lng <= max_lng:
+                filtered.append(poi)
+        
+        return filtered
     
     def _spatial_search_candidates(
         self,
