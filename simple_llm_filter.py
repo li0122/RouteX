@@ -6,7 +6,15 @@
 import requests
 import json
 import time
-from typing import List, Dict, Optional, Any
+import asyncio
+from typing import List, Dict, Optional, Any, Tuple
+
+try:
+    import aiohttp
+    ASYNC_SUPPORTED = True
+except ImportError:
+    ASYNC_SUPPORTED = False
+    print("⚠️ aiohttp 未安裝，併發功能不可用。安裝: pip install aiohttp")
 
 
 class SimpleLLMFilter:
@@ -17,12 +25,14 @@ class SimpleLLMFilter:
         base_url: str = "140.125.248.15:31008",
         model: str = "nvidia/llama-3.3-nemotron-super-49b-v1",
         timeout: int = 30,
-        delay_between_requests: float = 0.5
+        delay_between_requests: float = 0.5,
+        max_concurrent: int = 5  # 新增：最大併發數
     ):
         self.base_url = f"http://{base_url}" if not base_url.startswith('http') else base_url
         self.model = model
         self.timeout = timeout
         self.delay_between_requests = delay_between_requests
+        self.max_concurrent = max_concurrent
         
         # 設置會話
         self.session = requests.Session()
@@ -34,6 +44,10 @@ class SimpleLLMFilter:
         print(f"LLM過濾器初始化完成")
         print(f"   端點: {self.base_url}")
         print(f"   模型: {self.model}")
+        if ASYNC_SUPPORTED:
+            print(f"   併發支援: ✅ (最大 {max_concurrent} 併發)")
+        else:
+            print(f"   併發支援: ❌ (需安裝 aiohttp)")
     
     def is_travel_relevant(self, poi: Dict[str, Any], user_categories: Optional[List[str]] = None) -> tuple[bool, str, float]:
         """
@@ -115,10 +129,60 @@ class SimpleLLMFilter:
         
         return filtered_pois
     
+    def _filter_by_bounding_box(
+        self,
+        pois: List[Dict[str, Any]],
+        start_location: Tuple[float, float],
+        end_location: Tuple[float, float]
+    ) -> List[Dict[str, Any]]:
+        """
+        使用起終點構建矩形邊界框，過濾掉範圍外的 POI
+        
+        Args:
+            pois: POI 列表
+            start_location: 起點 (latitude, longitude)
+            end_location: 終點 (latitude, longitude)
+            
+        Returns:
+            在矩形邊界框內的 POI 列表
+        """
+        start_lat, start_lng = start_location
+        end_lat, end_lng = end_location
+        
+        # 計算矩形邊界（對角線兩點）
+        min_lat = min(start_lat, end_lat)
+        max_lat = max(start_lat, end_lat)
+        min_lng = min(start_lng, end_lng)
+        max_lng = max(start_lng, end_lng)
+        
+        print(f"\n📦 地理邊界框過濾:")
+        print(f"   起點: ({start_lat:.6f}, {start_lng:.6f})")
+        print(f"   終點: ({end_lat:.6f}, {end_lng:.6f})")
+        print(f"   邊界框: 緯度 [{min_lat:.6f}, {max_lat:.6f}]")
+        print(f"           經度 [{min_lng:.6f}, {max_lng:.6f}]")
+        
+        # 過濾 POI
+        filtered_pois = []
+        for poi in pois:
+            lat = poi.get('latitude', 0)
+            lng = poi.get('longitude', 0)
+            
+            # 檢查是否在矩形範圍內
+            if min_lat <= lat <= max_lat and min_lng <= lng <= max_lng:
+                filtered_pois.append(poi)
+        
+        print(f"   輸入 POI: {len(pois)} 個")
+        print(f"   矩形內 POI: {len(filtered_pois)} 個")
+        print(f"   過濾掉: {len(pois) - len(filtered_pois)} 個 ({100 * (len(pois) - len(filtered_pois)) / len(pois) if pois else 0:.1f}%)")
+        
+        return filtered_pois
+    
     def sequential_llm_filter_top_k(
         self, 
         ranked_pois: List[Dict[str, Any]], 
         target_k: int,
+        start_location: Optional[Tuple[float, float]] = None,
+        end_location: Optional[Tuple[float, float]] = None,
         multiplier: int = 3,
         user_categories: Optional[List[str]] = None,
         early_stop: bool = True,
@@ -128,13 +192,16 @@ class SimpleLLMFilter:
         按排序逐一審核，直到收集到target_k個通過的POI（支持早停）
         
         這是您要求的核心功能：
-        1. 從第1名開始逐一審核
-        2. 通過LLM審核的加入最終列表
-        3. 收集到足夠多的候選後早停（可配置）
+        1. 【新增】地理邊界框預過濾（如提供起終點）
+        2. 從第1名開始逐一審核
+        3. 通過LLM審核的加入最終列表
+        4. 收集到足夠多的候選後早停（可配置）
         
         Args:
             ranked_pois: 已排序的POI列表
             target_k: 目標數量
+            start_location: 起點座標 (latitude, longitude)，可選
+            end_location: 終點座標 (latitude, longitude)，可選
             multiplier: 初始搜索倍數（搜索前 target_k * multiplier 個）
             user_categories: 用戶偏好的類別列表（可選）
             early_stop: 是否啟用早停（默認True）
@@ -146,10 +213,23 @@ class SimpleLLMFilter:
         if not ranked_pois:
             return []
         
+        # 【新增】地理邊界框預過濾
+        if start_location and end_location:
+            print(f"\n🌍 啟用地理邊界框預過濾")
+            ranked_pois = self._filter_by_bounding_box(
+                ranked_pois, 
+                start_location, 
+                end_location
+            )
+            
+            if not ranked_pois:
+                print("⚠️ 警告: 地理過濾後沒有剩餘 POI")
+                return []
+        
         # 計算早停閾值
         early_stop_threshold = int(target_k * early_stop_buffer) if early_stop else float('inf')
         
-        print(f"開始逐一LLM審核流程")
+        print(f"\n開始逐一LLM審核流程")
         print(f"   目標: TOP {target_k} 推薦")
         print(f"   輸入: {len(ranked_pois)} 個排序POI")
         if early_stop:
@@ -208,6 +288,115 @@ class SimpleLLMFilter:
             print(f"   節省時間: 跳過 {len(ranked_pois) - rank} 次審核")
         
         # 返回前K個通過審核的POI
+        return approved_pois[:target_k]
+    
+    def sequential_llm_filter_top_k_concurrent(
+        self, 
+        ranked_pois: List[Dict[str, Any]], 
+        target_k: int,
+        start_location: Optional[Tuple[float, float]] = None,
+        end_location: Optional[Tuple[float, float]] = None,
+        batch_size: int = 10,
+        user_categories: Optional[List[str]] = None,
+        early_stop: bool = True,
+        early_stop_buffer: float = 1.5
+    ) -> List[Dict[str, Any]]:
+        """
+        併發批量審核版本 - 顯著提升速度
+        
+        使用批量併發 LLM 調用，可將審核時間縮短 5-10 倍
+        
+        Args:
+            ranked_pois: 已排序的POI列表
+            target_k: 目標數量
+            start_location: 起點座標 (latitude, longitude)，可選
+            end_location: 終點座標 (latitude, longitude)，可選
+            batch_size: 每批次併發數量（默認10）
+            user_categories: 用戶偏好的類別列表（可選）
+            early_stop: 是否啟用早停（默認True）
+            early_stop_buffer: 早停緩衝倍數（默認1.5）
+            
+        Returns:
+            通過LLM審核的TOP K POI列表
+        """
+        if not ASYNC_SUPPORTED:
+            print("⚠️ 併發功能不可用，降級到順序處理")
+            return self.sequential_llm_filter_top_k(
+                ranked_pois, target_k, start_location, end_location,
+                3, user_categories, early_stop, early_stop_buffer
+            )
+        
+        if not ranked_pois:
+            return []
+        
+        # 地理邊界框預過濾
+        if start_location and end_location:
+            print(f"\n🌍 啟用地理邊界框預過濾")
+            ranked_pois = self._filter_by_bounding_box(
+                ranked_pois, 
+                start_location, 
+                end_location
+            )
+            
+            if not ranked_pois:
+                print("⚠️ 警告: 地理過濾後沒有剩餘 POI")
+                return []
+        
+        early_stop_threshold = int(target_k * early_stop_buffer) if early_stop else float('inf')
+        
+        print(f"\n🚀 開始併發LLM審核流程")
+        print(f"   目標: TOP {target_k} 推薦")
+        print(f"   輸入: {len(ranked_pois)} 個排序POI")
+        print(f"   併發批次大小: {batch_size}")
+        if early_stop:
+            print(f"   早停策略: 收集到 {early_stop_threshold} 個候選後停止")
+        if user_categories:
+            print(f"   用戶偏好類別: {', '.join(user_categories)}")
+        
+        approved_pois = []
+        processed_count = 0
+        
+        # 分批併發處理
+        for batch_start in range(0, len(ranked_pois), batch_size):
+            # 早停檢查
+            if early_stop and len(approved_pois) >= early_stop_threshold:
+                print(f"\n✋ 早停觸發！")
+                print(f"   已收集 {len(approved_pois)} 個候選（目標 {target_k} 個）")
+                print(f"   停止審核，節省 {len(ranked_pois) - processed_count} 次 LLM 調用")
+                break
+            
+            batch_end = min(batch_start + batch_size, len(ranked_pois))
+            batch_pois = ranked_pois[batch_start:batch_end]
+            
+            print(f"\n📦 批次 {batch_start//batch_size + 1}: 併發處理 {len(batch_pois)} 個 POI...")
+            
+            # 併發調用 LLM
+            import asyncio
+            batch_results = asyncio.run(
+                self._batch_call_llm_async(batch_pois, user_categories)
+            )
+            
+            # 處理結果
+            for poi, (is_relevant, reason, llm_score) in zip(batch_pois, batch_results):
+                processed_count += 1
+                poi_name = poi.get('name', '未知POI')
+                poi_category = poi.get('primary_category', '未分類')
+                
+                print(f"   [{processed_count}/{len(ranked_pois)}] {poi_name}")
+                print(f"       評分: {llm_score:.1f}/10 | {poi_category}")
+                
+                if is_relevant:
+                    approved_pois.append(poi)
+                    print(f"       ✅ ACCEPT (已收集 {len(approved_pois)} 個)")
+                else:
+                    print(f"       ❌ REJECT")
+        
+        # 最終結果
+        print(f"\n✨ 併發審核完成!")
+        print(f"   審核完成: {processed_count} 個POI")
+        print(f"   通過審核: {len(approved_pois)} 個POI")
+        print(f"   返回前 {target_k} 名")
+        
         return approved_pois[:target_k]
     
     def _build_travel_relevance_prompt(self, poi: Dict[str, Any], user_categories: Optional[List[str]] = None) -> str:
@@ -336,6 +525,89 @@ Now please evaluate:"""
         except Exception as e:
             print(f"   LLM API調用失敗: {e}")
             return None
+    
+    async def _call_llm_async(self, session: 'aiohttp.ClientSession', prompt: str) -> Optional[str]:
+        """異步調用LLM API"""
+        if not ASYNC_SUPPORTED:
+            return None
+            
+        try:
+            url = f"{self.base_url}/v1/chat/completions"
+            
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "user", 
+                        "content": prompt
+                    }
+                ],
+                "temperature": 0.1,
+                "max_tokens": 500,
+                "stream": False
+            }
+            
+            timeout = aiohttp.ClientTimeout(total=self.timeout)
+            async with session.post(url, json=payload, timeout=timeout) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    content = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    return content.strip()
+                else:
+                    return None
+                    
+        except asyncio.TimeoutError:
+            return None
+        except Exception as e:
+            return None
+    
+    async def _batch_call_llm_async(
+        self, 
+        pois: List[Dict[str, Any]], 
+        user_categories: Optional[List[str]] = None
+    ) -> List[Tuple[bool, str, float]]:
+        """批量異步調用LLM API
+        
+        Args:
+            pois: POI 列表
+            user_categories: 用戶偏好類別
+            
+        Returns:
+            List of (is_relevant, reason, score) tuples
+        """
+        if not ASYNC_SUPPORTED:
+            # 降級到同步調用
+            results = []
+            for poi in pois:
+                result = self.is_travel_relevant(poi, user_categories)
+                results.append(result)
+            return results
+        
+        async with aiohttp.ClientSession() as session:
+            # 創建信號量控制併發數
+            semaphore = asyncio.Semaphore(self.max_concurrent)
+            
+            async def process_poi(poi: Dict[str, Any]) -> Tuple[bool, str, float]:
+                async with semaphore:
+                    try:
+                        prompt = self._build_travel_relevance_prompt(poi, user_categories)
+                        response = await self._call_llm_async(session, prompt)
+                        
+                        if response:
+                            return self._parse_travel_relevance_response(response)
+                        else:
+                            # API 失敗，使用備用規則
+                            fallback_result = self._fallback_travel_filter(poi)
+                            return fallback_result, "LLM API 失敗，使用備用規則", 5.0
+                    except Exception as e:
+                        fallback_result = self._fallback_travel_filter(poi)
+                        return fallback_result, f"錯誤: {str(e)}", 5.0
+            
+            # 併發執行所有請求
+            tasks = [process_poi(poi) for poi in pois]
+            results = await asyncio.gather(*tasks)
+            
+            return results
     
     def _parse_travel_relevance_response(self, response: str) -> tuple[bool, str, float]:
         """解析LLM回應 - 結構化解析

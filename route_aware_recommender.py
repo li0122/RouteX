@@ -223,137 +223,25 @@ class OSRMClient:
         max_concurrent: int = 20
     ) -> List[Optional[Dict]]:
         """
-        批量異步計算繞道成本 - 主要性能優化
+        批量計算繞道成本 - 使用同步 requests（避免 OSRM 封鎖）
+        
+        注意：OSRM 服務器會封鎖 aiohttp 請求，因此使用同步 requests
         
         Args:
             start: 起點
             end: 終點
             waypoints: 中繼點列表
-            max_concurrent: 最大並發數
+            max_concurrent: （已棄用，保留參數以兼容）
             
         Returns:
             繞道成本結果列表
         """
-        if not ASYNC_SUPPORTED or not waypoints:
-            # 回退到同步模式
-            return [self.calculate_detour(start, wp, end) for wp in waypoints]
+        if not waypoints:
+            return []
         
-        # 異步批量處理
-        connector = aiohttp.TCPConnector(
-            limit=50, 
-            limit_per_host=30,
-            keepalive_timeout=30,
-            enable_cleanup_closed=True
-        )
-        timeout = aiohttp.ClientTimeout(total=30, connect=10)
-        
-        async with aiohttp.ClientSession(
-            connector=connector,
-            timeout=timeout,
-            headers={
-                'Connection': 'keep-alive',
-                'Accept-Encoding': 'gzip, deflate'
-            }
-        ) as session:
-            
-            # 首先獲取直達路線
-            direct_route = await self._get_route_async(session, start, end)
-            if not direct_route:
-                return [None] * len(waypoints)
-            
-            # 使用信號量控制並發數
-            semaphore = asyncio.Semaphore(max_concurrent)
-            
-            async def calculate_single_detour(waypoint):
-                async with semaphore:
-                    return await self._calculate_detour_async(
-                        session, start, end, waypoint, direct_route
-                    )
-            
-            # 並行執行所有查詢
-            tasks = [calculate_single_detour(wp) for wp in waypoints]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # 處理異常
-            processed_results = []
-            for result in results:
-                if isinstance(result, Exception):
-                    print(f"繞道計算失敗: {result}")
-                    processed_results.append(None)
-                else:
-                    processed_results.append(result)
-            
-            return processed_results
-    
-    async def _get_route_async(
-        self,
-        session: 'aiohttp.ClientSession',
-        start: Tuple[float, float],
-        end: Tuple[float, float],
-        profile: str = "driving"
-    ) -> Optional[Dict]:
-        """異步獲取路線"""
-        try:
-            url = f"{self.server_url}/route/v1/{profile}/{start[1]},{start[0]};{end[1]},{end[0]}"
-            params = {
-                'overview': 'false',
-                'steps': 'false',
-                'alternatives': 'false'
-            }
-            
-            async with session.get(url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    if data.get('code') == 'Ok' and 'routes' in data:
-                        route = data['routes'][0]
-                        return {
-                            'distance': route['distance'],
-                            'duration': route['duration']
-                        }
-                
-                return None
-                
-        except Exception as e:
-            print(f"OSRM異步查詢失敗: {e}")
-            return None
-    
-    async def _calculate_detour_async(
-        self,
-        session: 'aiohttp.ClientSession',
-        start: Tuple[float, float],
-        end: Tuple[float, float],
-        waypoint: Tuple[float, float],
-        direct_route: Dict
-    ) -> Optional[Dict]:
-        """異步計算單個POI的繞道成本"""
-        
-        # 並行查詢兩段路線
-        route1_task = self._get_route_async(session, start, waypoint)
-        route2_task = self._get_route_async(session, waypoint, end)
-        
-        route1, route2 = await asyncio.gather(route1_task, route2_task)
-        
-        if not route1 or not route2:
-            return None
-        
-        # 計算繞道資訊
-        via_distance = route1['distance'] + route2['distance']
-        via_duration = route1['duration'] + route2['duration']
-        
-        extra_distance = via_distance - direct_route['distance']
-        extra_duration = via_duration - direct_route['duration']
-        detour_ratio = via_distance / direct_route['distance']
-        
-        return {
-            'direct_distance': direct_route['distance'],
-            'direct_duration': direct_route['duration'],
-            'via_distance': via_distance,
-            'via_duration': via_duration,
-            'extra_distance': extra_distance,
-            'extra_duration': extra_duration,
-            'detour_ratio': detour_ratio
-        }
+        # 使用同步模式（OSRM 會封鎖 aiohttp）
+        print(f"   使用同步模式批量計算繞道（避免 OSRM 封鎖 aiohttp）")
+        return [self.calculate_detour(start, wp, end) for wp in waypoints]
     
     def get_performance_stats(self) -> Dict[str, Any]:
         """獲取性能統計"""
@@ -780,7 +668,8 @@ class RouteAwareRecommender:
         device: str = 'cpu',
         enable_spatial_index: bool = True,
         enable_async: bool = True,
-        enable_llm_filter: bool = False
+        enable_llm_filter: bool = False,
+        enable_llm_concurrent: bool = True  # 新增：啟用LLM併發
     ):
         self.model = model
         self.poi_processor = poi_processor
@@ -788,6 +677,7 @@ class RouteAwareRecommender:
         self.device = torch.device(device)
         self.user_preference_model = UserPreferenceModel()
         self.enable_async = enable_async and ASYNC_SUPPORTED
+        self.enable_llm_concurrent = enable_llm_concurrent  # 儲存併發設置
         
         # 初始化空間索引
         if enable_spatial_index:
@@ -849,6 +739,9 @@ class RouteAwareRecommender:
         print(f"   - 異步支持: {async_text}")
         llm_text = "啟用" if self.enable_llm_filter else "禁用"
         print(f"   - LLM過濾器: {llm_text}")
+        if self.enable_llm_filter:
+            concurrent_text = "啟用" if self.enable_llm_concurrent else "禁用"
+            print(f"   - LLM併發: {concurrent_text}")
     
     def recommend_on_route(
         self,
@@ -1138,16 +1031,16 @@ class RouteAwareRecommender:
         start_time: float,
         user_history: List[Dict] = None
     ) -> List[Dict]:
-        """異步路線推薦流程"""
+        """異步路線推薦流程（注意：OSRM 使用同步以避免封鎖）"""
         
-        print("🚀 步驟4: 異步路線過濾...")
+        print("🚀 步驟4: 路線過濾...")
         osrm_start = time.time()
         
         # 提取POI位置
         poi_locations = [(poi['latitude'], poi['longitude']) for poi in filtered_pois]
         
-        # 異步批量計算繞道成本
-        detour_results = await self.osrm_client.batch_calculate_detours(
+        # 批量計算繞道成本（使用同步模式避免 OSRM 封鎖）
+        detour_results = self.osrm_client.batch_calculate_detours(
             start_location, end_location, poi_locations, max_concurrent=20
         )
         
@@ -1184,7 +1077,8 @@ class RouteAwareRecommender:
         
         # 生成推薦結果
         recommendations = self._generate_recommendations(
-            valid_pois, scores, valid_detours, top_k, user_profile, user_history
+            valid_pois, scores, valid_detours, top_k, user_profile, user_history,
+            start_location, end_location
         )
         
         # 更新性能統計
@@ -1287,7 +1181,8 @@ class RouteAwareRecommender:
         
         # 生成推薦結果
         recommendations = self._generate_recommendations(
-            valid_pois, scores, valid_detours, top_k, user_profile, user_history
+            valid_pois, scores, valid_detours, top_k, user_profile, user_history,
+            start_location, end_location
         )
         
         # 更新性能統計
@@ -1352,7 +1247,8 @@ class RouteAwareRecommender:
         
         # 生成推薦結果
         recommendations = self._generate_recommendations(
-            selected_pois, scores, mock_detours, top_k, {'preferred_categories': []}, None
+            selected_pois, scores, mock_detours, top_k, {'preferred_categories': []}, None,
+            start_location, end_location
         )
         
         print(f"   備用策略生成 {len(recommendations)} 個推薦")
@@ -1379,7 +1275,9 @@ class RouteAwareRecommender:
         detours: List[Dict],
         top_k: int,
         user_profile: Dict = None,
-        user_history: List[Dict] = None
+        user_history: List[Dict] = None,
+        start_location: Tuple[float, float] = None,
+        end_location: Tuple[float, float] = None
     ) -> List[Dict]:
         """生成推薦結果 - 包含LLM審核"""
         
@@ -1420,15 +1318,31 @@ class RouteAwareRecommender:
             # 提取POI用於LLM審核
             ranked_pois = [rec['poi'] for rec in recommendations]
             
-            # 使用LLM逐一審核，直到收集到足夠多的通過候選（支持早停）
-            approved_pois = self.llm_filter.sequential_llm_filter_top_k(
-                ranked_pois, 
-                target_k=top_k,
-                multiplier=3,  # 搜索前 top_k * 3 個候選
-                user_categories=user_categories if user_categories else None,
-                early_stop=True,  # 啟用早停
-                early_stop_buffer=1.5  # 收集到 top_k * 1.5 個候選後停止
-            )
+            # 根據配置選擇併發或順序模式
+            if self.enable_llm_concurrent:
+                # 使用併發版本（顯著提升速度）
+                approved_pois = self.llm_filter.sequential_llm_filter_top_k_concurrent(
+                    ranked_pois, 
+                    target_k=top_k,
+                    start_location=start_location,
+                    end_location=end_location,
+                    batch_size=10,  # 每批次併發10個
+                    user_categories=user_categories if user_categories else None,
+                    early_stop=True,
+                    early_stop_buffer=1.5
+                )
+            else:
+                # 使用順序版本（兼容模式）
+                approved_pois = self.llm_filter.sequential_llm_filter_top_k(
+                    ranked_pois, 
+                    target_k=top_k,
+                    start_location=start_location,
+                    end_location=end_location,
+                    multiplier=3,
+                    user_categories=user_categories if user_categories else None,
+                    early_stop=True,
+                    early_stop_buffer=1.5
+                )
             
             # 重新構建推薦結果（保持原始分數和詳細資訊）
             final_recommendations = []
