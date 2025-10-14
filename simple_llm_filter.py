@@ -215,8 +215,9 @@ class SimpleLLMFilter:
         poi_name = poi.get('name', '未知')
         poi_category = poi.get('primary_category', '未分類')
         poi_description = poi.get('description', '')
-        stars = poi.get('stars', 0)
-        review_count = poi.get('review_count', 0)
+        # 使用正確的欄位名稱
+        stars = poi.get('avg_rating', poi.get('stars', 0))
+        review_count = poi.get('num_reviews', poi.get('review_count', 0))
         
         # 如果有用戶活動意圖，使用嚴格的匹配邏輯
         if user_categories and len(user_categories) > 0:
