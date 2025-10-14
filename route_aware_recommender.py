@@ -885,9 +885,29 @@ class RouteAwareRecommender:
         inference_time = time.time() - inference_start
         print(f"   模型評分完成 (耗時: {inference_time:.3f}s)")
         
-        # 6. 生成推薦結果
+        # 6. 計算 OSRM 繞道信息（僅針對評分後的 POI）
+        print("🚗 步驟5: 計算繞道信息...")
+        osrm_start = time.time()
+        
+        # 提取 POI 位置
+        poi_locations = [(poi['latitude'], poi['longitude']) for poi in category_filtered_pois]
+        
+        # 同步批量計算繞道成本（使用列表推導式，避免 async）
+        detours = []
+        for poi_location in poi_locations:
+            print("正在處理", poi_location)
+            detour = self.osrm_client.calculate_detour(
+                start_location, poi_location, end_location
+            )
+            detours.append(detour)
+        
+        osrm_time = time.time() - osrm_start
+        valid_detours = [d for d in detours if d and d.get('detour_ratio', 0) > 0]
+        print(f"   繞道計算完成: {len(valid_detours)}/{len(detours)} 個有效 (耗時: {osrm_time:.3f}s)")
+        
+        # 7. 生成推薦結果
         recommendations = self._generate_recommendations(
-            category_filtered_pois, scores, None, top_k, user_profile, user_history,
+            category_filtered_pois, scores, detours, top_k, user_profile, user_history,
             start_location, end_location
         )
         
@@ -1537,6 +1557,18 @@ Do NOT include explanations, just return the comma-separated category list."""
     ) -> List[Dict]:
         """生成推薦結果 - 包含LLM審核"""
         
+        # 如果沒有提供 detours，創建空的 detour 信息
+        if detours is None:
+            detours = [{
+                'direct_distance': 0,
+                'direct_duration': 0,
+                'via_distance': 0,
+                'via_duration': 0,
+                'extra_distance': 0,
+                'extra_duration': 0,
+                'detour_ratio': 1.0
+            } for _ in pois]
+        
         # 組合結果
         recommendations = []
         for poi, score, detour in zip(pois, scores, detours):
@@ -1544,7 +1576,7 @@ Do NOT include explanations, just return the comma-separated category list."""
                 'poi': poi,
                 'score': float(score),
                 'detour_info': detour,
-                'extra_time_minutes': detour['extra_duration'] / 60.0,
+                'extra_time_minutes': detour.get('extra_duration', 0) / 60.0 if detour.get('extra_duration') else 0,
                 'reasons': self._generate_recommendation_reasons(
                     poi, user_profile or {}, score, detour
                 )
@@ -1770,15 +1802,20 @@ Do NOT include explanations, just return the comma-separated category list."""
             reasons.append(f"� 好評推薦 ({rating:.1f}⭐)")
         
         # 3. 路線便利性 (考慮用戶時間偏好)
-        extra_minutes = detour['extra_duration'] / 60.0
-        detour_ratio = detour.get('detour_ratio', 0)
+        extra_minutes = detour.get('extra_duration', 0) / 60.0 if detour.get('extra_duration') else 0
+        detour_ratio = detour.get('detour_ratio', 1.0)
         
-        if extra_minutes < 10:
-            priority_reasons.append(f"幾乎順路 (僅需額外 {extra_minutes:.0f} 分鐘)")
-        elif extra_minutes < 20:
-            reasons.append(f"輕鬆到達 (額外 {extra_minutes:.0f} 分鐘)")
-        elif extra_minutes < 30 and detour_ratio < 0.3:
-            reasons.append(f"適度繞行 (額外 {extra_minutes:.0f} 分鐘，值得一訪)")
+        if extra_minutes > 0:
+            if extra_minutes < 10:
+                priority_reasons.append(f"幾乎順路 (僅需額外 {extra_minutes:.0f} 分鐘)")
+            elif extra_minutes < 20:
+                reasons.append(f"輕鬆到達 (額外 {extra_minutes:.0f} 分鐘)")
+            elif extra_minutes < 30 and (detour_ratio - 1.0) < 0.3:
+                reasons.append(f"適度繞行 (額外 {extra_minutes:.0f} 分鐘，值得一訪)")
+        else:
+            # 沒有 detour 信息時，基於類別和評分推薦
+            if rating >= 4.5:
+                reasons.append("地理位置優越")
         
         # 4. 價格與價值
         price_level = poi.get('price_level', 0)
