@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet 地圖測試 - RouteX</title>
+    <link rel="stylesheet" href="/static/lib/leaflet/leaflet.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 30px 0;
+        }
+        .test-section h2 {
+            color: #764ba2;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-start {
+            background: #10b981;
+            color: white;
+        }
+        .btn-end {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-test {
+            background: #3b82f6;
+            color: white;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .info-box {
+            background: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        .success-box {
+            background: #f0fdf4;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        .status {
+            font-family: monospace;
+            background: #1e293b;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status-line {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Leaflet 地圖測試頁面</h1>
+        <p class="subtitle">RouteX - Leaflet + OSM 整合驗證</p>
+
+        <!-- 測試 1: 地圖選擇器 -->
+        <div class="test-section">
+            <h2>📍 測試 1: 地圖選擇器</h2>
+            <div class="info-box">
+                <strong>功能測試：</strong>點擊地圖選擇起點和終點
+            </div>
+            
+            <div id="test-map-picker"></div>
+            
+            <div class="button-group">
+                <button class="btn-start" onclick="testMapPicker.setMode('start')">
+                    🟢 設定起點
+                </button>
+                <button class="btn-end" onclick="testMapPicker.setMode('end')">
+                    🔴 設定終點
+                </button>
+                <button class="btn-test" onclick="quickTestPicker()">
+                    ⚡ 快速測試（金門大橋→漁人碼頭）
+                </button>
+            </div>
+            
+            <div class="success-box" id="picker-status">
+                <div><strong>起點：</strong><span id="start-display">未設定</span></div>
+                <div><strong>終點：</strong><span id="end-display">未設定</span></div>
+            </div>
+        </div>
+
+        <!-- 測試 2: 結果地圖 -->
+        <div class="test-section">
+            <h2>🎯 測試 2: 結果地圖與 OSRM 路線</h2>
+            <div class="info-box">
+                <strong>功能測試：</strong>顯示推薦地點和 OSRM 實際路線
+            </div>
+            
+            <div id="test-result-map"></div>
+            
+            <div class="button-group">
+                <button class="btn-test" onclick="testShortRoute()">
+                    測試短程路線（台北市區）
+                </button>
+                <button class="btn-test" onclick="testSFRoute()">
+                    測試舊金山路線
+                </button>
+                <button class="btn-test" onclick="clearResultMap()">
+                    清除地圖
+                </button>
+            </div>
+        </div>
+
+        <!-- 狀態日誌 -->
+        <div class="test-section">
+            <h2>📝 測試日誌</h2>
+            <div class="status" id="log-container">
+                <div class="status-line">等待測試...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/lib/leaflet/leaflet.js"></script>
+    <script src="/static/lib/mbtiles/sql-wasm.js"></script>
+    <script src="/static/lib/mbtiles/leaflet-mbtiles.js"></script>
+    <script src="/static/js/leaflet-map-picker.js"></script>
+    <script src="/static/js/leaflet-result-map.js"></script>
+    <script>
+        let testMapPicker = null;
+        let testResultMap = null;
+        let logLines = [];
+
+        // 日誌函數
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+            const line = `[${timestamp}] ${prefix} ${message}`;
+            logLines.push(line);
+            if (logLines.length > 50) logLines.shift();
+            
+            const container = document.getElementById('log-container');
+            container.innerHTML = logLines.map(l => `<div class="status-line">${l}</div>`).join('');
+            container.scrollTop = container.scrollHeight;
+            
+            console.log(message);
+        }
+
+        // 初始化
+        window.addEventListener('load', () => {
+            log('頁面加載完成，初始化測試環境...');
+            
+            // 初始化地圖選擇器
+            try {
+                testMapPicker = new LeafletMapPicker('test-map-picker');
+                log('地圖選擇器初始化成功', 'success');
+                
+                // 監聽起終點變化
+                const originalSetStart = testMapPicker.setStartLocation.bind(testMapPicker);
+                testMapPicker.setStartLocation = function(lat, lng) {
+                    originalSetStart(lat, lng);
+                    document.getElementById('start-display').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                    log(`起點已設定: ${lat.toFixed(6)}, ${lng.toFixed(6)}`, 'success');
+                };
+                
+                const originalSetEnd = testMapPicker.setEndLocation.bind(testMapPicker);
+                testMapPicker.setEndLocation = function(lat, lng) {
+                    originalSetEnd(lat, lng);
+                    document.getElementById('end-display').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                    log(`終點已設定: ${lat.toFixed(6)}, ${lng.toFixed(6)}`, 'success');
+                };
+                
+            } catch (error) {
+                log(`地圖選擇器初始化失敗: ${error.message}`, 'error');
+            }
+            
+            // 初始化結果地圖
+            try {
+                testResultMap = new LeafletResultMap('test-result-map');
+                log('結果地圖初始化成功', 'success');
+            } catch (error) {
+                log(`結果地圖初始化失敗: ${error.message}`, 'error');
+            }
+        });
+
+        // 快速測試選擇器
+        function quickTestPicker() {
+            log('執行快速測試：金門大橋 → 漁人碼頭');
+            testMapPicker.setStartLocation(37.8199, -122.4783);
+            testMapPicker.setEndLocation(37.8080, -122.4177);
+            log('快速測試完成', 'success');
+        }
+
+        // 測試短程路線（台北）
+        function testShortRoute() {
+            log('測試短程路線：台北市區');
+            
+            const testData = {
+                start_location: [25.0330, 121.5654],  // 台北 101
+                end_location: [25.0478, 121.5170],    // 台北車站
+                recommendations: [
+                    {
+                        poi: {
+                            name: '中正紀念堂',
+                            latitude: 25.0361,
+                            longitude: 121.5202,
+                            primary_category: '歷史建築',
+                            avg_rating: 4.5,
+                            num_reviews: 12500
+                        },
+                        score: 0.892,
+                        extra_time_minutes: 15,
+                        llm_approved: true
+                    },
+                    {
+                        poi: {
+                            name: '台北植物園',
+                            latitude: 25.0307,
+                            longitude: 121.5089,
+                            primary_category: '公園',
+                            avg_rating: 4.2,
+                            num_reviews: 3200
+                        },
+                        score: 0.845,
+                        extra_time_minutes: 12,
+                        llm_approved: true
+                    }
+                ]
+            };
+            
+            testResultMap.setData(testData);
+            log('台北測試路線已載入', 'success');
+        }
+
+        // 測試舊金山路線
+        function testSFRoute() {
+            log('測試舊金山路線');
+            
+            const testData = {
+                start_location: [37.8199, -122.4783],  // 金門大橋
+                end_location: [37.7880, -122.4075],    // 聯合廣場
+                recommendations: [
+                    {
+                        poi: {
+                            name: '漁人碼頭',
+                            latitude: 37.8080,
+                            longitude: -122.4177,
+                            primary_category: '旅遊景點',
+                            avg_rating: 4.3,
+                            num_reviews: 45000
+                        },
+                        score: 0.915,
+                        extra_time_minutes: 20,
+                        llm_approved: true
+                    },
+                    {
+                        poi: {
+                            name: 'Pier 39',
+                            latitude: 37.8087,
+                            longitude: -122.4098,
+                            primary_category: '購物中心',
+                            avg_rating: 4.4,
+                            num_reviews: 38000
+                        },
+                        score: 0.888,
+                        extra_time_minutes: 18,
+                        llm_approved: true
+                    },
+                    {
+                        poi: {
+                            name: 'Ghirardelli Square',
+                            latitude: 37.8055,
+                            longitude: -122.4228,
+                            primary_category: '購物中心',
+                            avg_rating: 4.5,
+                            num_reviews: 15000
+                        },
+                        score: 0.856,
+                        extra_time_minutes: 15,
+                        llm_approved: true
+                    }
+                ]
+            };
+            
+            testResultMap.setData(testData);
+            log('舊金山測試路線已載入，等待 OSRM 路線...', 'success');
+        }
+
+        // 清除結果地圖
+        function clearResultMap() {
+            if (testResultMap) {
+                testResultMap.clearMap();
+                log('結果地圖已清除');
+            }
+        }
+    </script>
+</body>
+</html>

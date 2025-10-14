@@ -174,8 +174,17 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/static/js/offline-map-picker.js"></script>
-    <script src="/static/js/offline-result-map.js"></script>
+    <!-- Leaflet 地圖庫 -->
+    <link rel="stylesheet" href="/static/lib/leaflet/leaflet.css">
+    <script src="/static/lib/leaflet/leaflet.js"></script>
+    
+    <!-- SQL.js (MBTiles 離線瓦片支援) -->
+    <script src="/static/lib/mbtiles/sql-wasm.js"></script>
+    <script src="/static/lib/mbtiles/leaflet-mbtiles.js"></script>
+    
+    <!-- 地圖組件 -->
+    <script src="/static/js/leaflet-map-picker.js"></script>
+    <script src="/static/js/leaflet-result-map.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

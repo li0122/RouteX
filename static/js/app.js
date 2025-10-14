@@ -2,10 +2,10 @@
 
 // 全域變數
 let map = null;
+let mapPicker = null;  // 改用 Leaflet 地圖選擇器
 let markers = [];
 let selectedCategories = [];
 let routeLine = null;
-let offlineMapPicker = null;
 let startLocation = null;
 let endLocation = null;
 
@@ -13,7 +13,7 @@ let endLocation = null;
 document.addEventListener('DOMContentLoaded', function() {
     initCategorySelection();
     initTopKSlider();
-    initOfflineMapPicker();
+    initLeafletMapPicker();  // 使用 Leaflet
     initForm();
 });
 
@@ -44,36 +44,13 @@ function updateSelectedCategories() {
     });
 }
 
-// 離線地圖選擇器
-function initOfflineMapPicker() {
-    offlineMapPicker = new OfflineMapPicker('locationPickerMap', {
-        bounds: {
-            minLat: 37.6,
-            maxLat: 37.9,
-            minLng: -122.6,
-            maxLng: -122.2
-        },
-        onStartSelect: (lat, lng) => {
-            startLocation = [lat, lng];
-            document.getElementById('startLocation').value = `${lat},${lng}`;
-            document.getElementById('startLocationDisplay').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            document.getElementById('setStartBtn').style.opacity = '0.7';
-            document.getElementById('setStartBtn').style.transform = 'scale(1)';
-            showToast('出發點已設定！', 'success');
-        },
-        onEndSelect: (lat, lng) => {
-            endLocation = [lat, lng];
-            document.getElementById('endLocation').value = `${lat},${lng}`;
-            document.getElementById('endLocationDisplay').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            document.getElementById('setEndBtn').style.opacity = '0.7';
-            document.getElementById('setEndBtn').style.transform = 'scale(1)';
-            showToast('目的地已設定！', 'success');
-        }
-    });
+// Leaflet 地圖選擇器
+function initLeafletMapPicker() {
+    mapPicker = new LeafletMapPicker('locationPickerMap');
     
     // 設定出發點按鈕
     document.getElementById('setStartBtn').addEventListener('click', function() {
-        offlineMapPicker.setSelectingStart(true);
+        mapPicker.setMode('start');
         this.style.opacity = '1';
         this.style.transform = 'scale(1.05)';
         document.getElementById('setEndBtn').style.opacity = '0.7';
@@ -83,7 +60,7 @@ function initOfflineMapPicker() {
     
     // 設定目的地按鈕
     document.getElementById('setEndBtn').addEventListener('click', function() {
-        offlineMapPicker.setSelectingEnd(true);
+        mapPicker.setMode('end');
         this.style.opacity = '1';
         this.style.transform = 'scale(1.05)';
         document.getElementById('setStartBtn').style.opacity = '0.7';
@@ -134,8 +111,12 @@ function initForm() {
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         
+        // 從地圖選擇器獲取起終點
+        const start = mapPicker.startLocation;
+        const end = mapPicker.endLocation;
+        
         // 驗證地點是否已選擇
-        if (!startLocation || !endLocation) {
+        if (!start || !end) {
             showError('請先在地圖上選擇出發點和目的地！');
             return;
         }
@@ -148,8 +129,8 @@ function initForm() {
         
         // 準備請求數據
         const requestData = {
-            start_location: startLocation,
-            end_location: endLocation,
+            start_location: start,
+            end_location: end,
             activity_intent: activityIntent,  // 使用活動意圖代替類別
             top_k: topK,
             enable_llm: enableLLM
@@ -258,13 +239,13 @@ function updateStatistics(data) {
 
 // 初始化地圖
 function initMap(data) {
-    // 創建離線結果地圖
+    // 創建 Leaflet 結果地圖
     if (!map) {
-        map = new OfflineResultMap('map');
+        map = new LeafletResultMap('map');
     }
     
     // 設置數據並繪製
-    map.setData(data.start_location, data.end_location, data.recommendations);
+    map.setData(data);
 }
 
 // 顯示推薦列表
