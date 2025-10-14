@@ -66,6 +66,7 @@ def example_real_time_recommendation():
             user_history=user_history,
             start_location=start_location,
             end_location=end_location,
+            activityIntent="旅遊探索",
             top_k=5,
             max_detour_ratio=1.25,
             max_extra_duration=900  # 15分鐘

@@ -749,7 +749,7 @@ class RouteAwareRecommender:
         user_history: List[Dict],
         start_location: Tuple[float, float],
         end_location: Tuple[float, float],
-        user_needs: str = "旅遊探索",  # 新增：使用者需求
+        activityIntent: str = "旅遊探索",  # 使用者需求（活動意圖）
         candidate_pois: Optional[List[Dict]] = None,
         top_k: int = 10,
         max_detour_ratio: float = 1.3,
@@ -768,7 +768,7 @@ class RouteAwareRecommender:
             user_history: 用戶歷史記錄
             start_location: 起點 (lat, lon)
             end_location: 終點 (lat, lon)
-            user_needs: 使用者需求描述 (新增)
+            activityIntent: 使用者活動意圖/需求描述
             candidate_pois: 候選POI列表 (None則自動搜索)
             top_k: 返回前K個推薦
             max_detour_ratio: 最大繞道比例 (已棄用)
@@ -847,10 +847,10 @@ class RouteAwareRecommender:
         all_categories = [cat for cat in all_categories if cat and cat != 'Unknown']
         
         print(f"   邊界框內共有 {len(all_categories)} 個不同類別")
-        print(f"   使用者需求: {user_needs}")
+        print(f"   使用者需求: {activityIntent}")
         
         # 使用LLM篩選符合需求的類別
-        selected_categories = self._llm_filter_categories(user_needs, all_categories)
+        selected_categories = self._llm_filter_categories(activityIntent, all_categories)
         
         llm_time = time.time() - llm_start
         print(f"   LLM篩選結果: {len(selected_categories)} 個類別")
@@ -902,14 +902,14 @@ class RouteAwareRecommender:
     
     def _llm_filter_categories(
         self,
-        user_needs: str,
+        activityIntent: str,
         all_categories: List[str]
     ) -> List[str]:
         """
         使用LLM根據使用者需求篩選符合的商店類別
         
         Args:
-            user_needs: 使用者需求描述
+            activityIntent: 使用者活動意圖/需求描述
             all_categories: 所有商店類別列表
         
         Returns:
@@ -926,7 +926,7 @@ class RouteAwareRecommender:
         
         prompt = f"""You are a travel recommendation assistant.
 
-User Needs: {user_needs}
+User Needs: {activityIntent}
 
 Available Categories:
 {categories_str}

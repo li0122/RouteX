@@ -37,10 +37,11 @@ def quick_start_without_llm():
     
     # 2. 獲取推薦
     recommendations = recommender.recommend_on_route(
-        user_id='1',
-        user_history=[],  # 空歷史
-        start_location=(37.7749, -122.4194),  # 舊金山
-        end_location=(37.8199, -122.4783),    # 金門大橋
+        user_id=user_id,
+        user_history=user_history,
+        start_location=start,
+        end_location=end,
+        activityIntent="旅遊探索",
         top_k=5
     )
     
