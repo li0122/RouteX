@@ -1582,9 +1582,74 @@ Do NOT include explanations, just return the comma-separated category list."""
                 )
             })
         
-        # 按分數排序並返回 top-k
+        # 按分數排序
         recommendations.sort(key=lambda x: x['score'], reverse=True)
-        return recommendations[:top_k]
+        
+        # 🎯 核心功能：LLM逐一審核
+        if self.enable_llm_filter and self.llm_filter:
+            print(f"\n🤖 開始LLM逐一審核流程...")
+            print(f"   目標: TOP {top_k} 旅遊推薦")
+            print(f"   候選: {len(recommendations)} 個排序結果")
+            
+            # 提取用戶偏好類別
+            user_categories = []
+            if user_history:
+                user_categories = list(set([
+                    item.get('category') 
+                    for item in user_history 
+                    if item.get('category')
+                ]))
+            
+            if user_categories:
+                print(f"   用戶偏好類別: {', '.join(user_categories)}")
+            
+            # 提取POI用於LLM審核
+            ranked_pois = [rec['poi'] for rec in recommendations]
+            
+            # 根據配置選擇併發或順序模式
+            if self.enable_llm_concurrent:
+                # 使用併發版本（顯著提升速度）
+                approved_pois = self.llm_filter.sequential_llm_filter_top_k_concurrent(
+                    ranked_pois, 
+                    target_k=top_k,
+                    start_location=start_location,
+                    end_location=end_location,
+                    batch_size=10,  # 每批次併發10個
+                    user_categories=user_categories if user_categories else None,
+                    early_stop=True,
+                    early_stop_buffer=1.5
+                )
+            else:
+                # 使用順序版本（兼容模式）
+                approved_pois = self.llm_filter.sequential_llm_filter_top_k(
+                    ranked_pois, 
+                    target_k=top_k,
+                    start_location=start_location,
+                    end_location=end_location,
+                    multiplier=3,
+                    user_categories=user_categories if user_categories else None,
+                    early_stop=True,
+                    early_stop_buffer=1.5
+                )
+            
+            # 重新構建推薦結果（保持原始分數和詳細資訊）
+            final_recommendations = []
+            for approved_poi in approved_pois:
+                # 找到對應的原始推薦資訊
+                for rec in recommendations:
+                    if rec['poi'] == approved_poi:
+                        # 添加LLM審核標記
+                        rec['llm_approved'] = True
+                        final_recommendations.append(rec)
+                        break
+            
+            print(f"\n✅ LLM審核完成!")
+            print(f"   最終推薦: {len(final_recommendations)} 個")
+            
+            return final_recommendations
+        else:
+            # 不使用LLM過濾，直接返回top-k
+            return recommendations[:top_k]
     
     def _update_performance_stats(self, total_time: float):
         """更新性能統計"""
