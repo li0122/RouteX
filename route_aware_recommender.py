@@ -46,7 +46,12 @@ class OSRMClient:
     def __init__(self, server_url: str = "http://router.project-osrm.org"):
         self.server_url = server_url
         self.cache_size = 10000  # 增加緩存大小從1000到10000
-        self.session = None
+        # 使用 Session 連接池提升性能
+        self.session = requests.Session()
+        self.session.headers.update({
+            'Connection': 'keep-alive',
+            'Accept-Encoding': 'gzip, deflate'
+        })
         self.performance_stats = {
             'cache_hits': 0,
             'cache_misses': 0,
@@ -88,16 +93,17 @@ class OSRMClient:
                 'alternatives': 'false'  # 不需要替代路線
             }
             
-            # 使用會話復用連接
-            if not hasattr(requests, '_session'):
-                requests._session = requests.Session()
-                requests._session.headers.update({
-                    'Connection': 'keep-alive',
-                    'Accept-Encoding': 'gzip, deflate'
-                })
-            
-            response = requests._session.get(url, params=params, timeout=10)
-            response.raise_for_status()
+            # 使用重試機制處理暫時性失敗
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = self.session.get(url, params=params, timeout=10)
+                    response.raise_for_status()
+                    break
+                except Exception as e:
+                    if attempt == max_retries - 1:
+                        raise
+                    time.sleep(0.1 * (attempt + 1))  # 指數退避
             
             data = response.json()
             
@@ -885,29 +891,66 @@ class RouteAwareRecommender:
         inference_time = time.time() - inference_start
         print(f"   模型評分完成 (耗時: {inference_time:.3f}s)")
         
-        # 6. 計算 OSRM 繞道信息（僅針對評分後的 POI）
+        # 5.5. 僅保留TOP候選以減少OSRM計算量
+        # 結合POI和分數
+        poi_score_pairs = list(zip(category_filtered_pois, scores))
+        # 按分數排序
+        poi_score_pairs.sort(key=lambda x: x[1], reverse=True)
+        
+        # 僅計算TOP候選的OSRM（默認top_k的3倍，確保有足夠候選給LLM審核）
+        top_candidates_count = min(len(poi_score_pairs), top_k * 3)
+        top_candidates = [p[0] for p in poi_score_pairs[:top_candidates_count]]
+        top_scores = [p[1] for p in poi_score_pairs[:top_candidates_count]]
+        
+        print(f"   📊 優化: 僅對TOP {top_candidates_count}/{len(category_filtered_pois)} 候選計算OSRM")
+        
+        # 6. 計算 OSRM 繞道信息（僅針對TOP候選）
         print("🚗 步驟5: 計算繞道信息...")
         osrm_start = time.time()
         
         # 提取 POI 位置
-        poi_locations = [(poi['latitude'], poi['longitude']) for poi in category_filtered_pois]
+        poi_locations = [(poi['latitude'], poi['longitude']) for poi in top_candidates]
         
-        # 同步批量計算繞道成本（使用列表推導式，避免 async）
-        detours = []
-        for poi_location in poi_locations:
-            print("正在處理", poi_location)
-            detour = self.osrm_client.calculate_detour(
-                start_location, poi_location, end_location
-            )
-            detours.append(detour)
+        # 使用線程池並發計算（顯著提升速度）
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        # 根據POI數量動態調整並發數
+        max_workers = min(20, max(5, len(poi_locations) // 2))
+        print(f"   使用 {max_workers} 個並發線程")
+        
+        detours = [None] * len(poi_locations)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任務
+            future_to_idx = {
+                executor.submit(
+                    self.osrm_client.calculate_detour,
+                    start_location, poi_loc, end_location
+                ): idx
+                for idx, poi_loc in enumerate(poi_locations)
+            }
+            
+            # 收集結果
+            completed = 0
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    detours[idx] = future.result()
+                    completed += 1
+                    if completed % 10 == 0:
+                        print(f"   進度: {completed}/{len(poi_locations)}")
+                except Exception as e:
+                    print(f"   POI {idx} 計算失敗: {e}")
+                    detours[idx] = None
         
         osrm_time = time.time() - osrm_start
         valid_detours = [d for d in detours if d and d.get('detour_ratio', 0) > 0]
         print(f"   繞道計算完成: {len(valid_detours)}/{len(detours)} 個有效 (耗時: {osrm_time:.3f}s)")
+        if osrm_time > 0:
+            print(f"   平均速度: {len(detours)/osrm_time:.1f} POI/秒 (並發模式)")
         
         # 7. 生成推薦結果
         recommendations = self._generate_recommendations(
-            category_filtered_pois, scores, detours, top_k, user_profile, user_history,
+            top_candidates, top_scores, detours, top_k, user_profile, user_history,
             start_location, end_location
         )
         
