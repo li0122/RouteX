@@ -159,30 +159,66 @@ def recommend():
                 })
         
         # 調用推薦器
-        recommendations = recommender.recommend_on_route(
-            user_id='web_user',
-            user_history=user_history,
-            start_location=tuple(start_location),
-            end_location=tuple(end_location),
-            top_k=top_k,
-            max_detour_ratio=1.3,
-            max_extra_duration=900
-        )
+        import time
+        start_time = time.time()
         
-        print(f"生成 {len(recommendations)} 個推薦")
+        try:
+            recommendations = recommender.recommend_on_route(
+                user_id='web_user',
+                user_history=user_history,
+                start_location=tuple(start_location),
+                end_location=tuple(end_location),
+                top_k=top_k,
+                max_detour_ratio=1.3,
+                max_extra_duration=900
+            )
+            
+            elapsed = time.time() - start_time
+            print(f"✅ 推薦完成: {len(recommendations)} 個，耗時 {elapsed:.1f}s")
+            
+        except Exception as e:
+            elapsed = time.time() - start_time
+            print(f"❌ 推薦失敗: {e}，耗時 {elapsed:.1f}s")
+            raise
         
         # 格式化返回結果
+        print(f"📦 正在格式化 {len(recommendations)} 個推薦結果...")
+        
+        try:
+            formatted_recs = format_recommendations(recommendations)
+            print(f"✅ 格式化完成")
+        except Exception as e:
+            print(f"❌ 格式化失敗: {e}")
+            import traceback
+            traceback.print_exc()
+            # 返回簡化版本
+            formatted_recs = [{
+                'poi': {
+                    'name': rec.get('poi', {}).get('name', '未知'),
+                    'primary_category': '未知',
+                    'avg_rating': 0,
+                    'num_reviews': 0,
+                    'latitude': 0,
+                    'longitude': 0
+                },
+                'score': 0,
+                'error': '格式化失敗'
+            } for rec in recommendations[:top_k]]
+        
         result = {
             'success': True,
             'start_location': start_location,
             'end_location': end_location,
             'categories': categories,
+            'activity_intent': activity_intent if activity_intent else None,
             'top_k': top_k,
             'enable_llm': enable_llm,
             'count': len(recommendations),
-            'recommendations': format_recommendations(recommendations)
+            'recommendations': formatted_recs,
+            'processing_time': elapsed
         }
         
+        print(f"🚀 返回結果: {len(formatted_recs)} 個推薦")
         return jsonify(result)
         
     except Exception as e:
@@ -196,29 +232,58 @@ def recommend():
 
 
 def format_recommendations(recommendations):
-    """格式化推薦結果"""
+    """格式化推薦結果 - 增強版本"""
     formatted = []
     
-    for rec in recommendations:
-        poi = rec['poi']
-        
-        formatted_rec = {
-            'poi': {
-                'name': poi.get('name', '未知地點'),
-                'primary_category': poi.get('primary_category', '未分類'),
-                'avg_rating': float(poi.get('avg_rating', 0)) if poi.get('avg_rating') else None,
-                'num_reviews': int(poi.get('num_reviews', 0)) if poi.get('num_reviews') else 0,
-                'latitude': float(poi.get('latitude', 0)),
-                'longitude': float(poi.get('longitude', 0))
-            },
-            'score': float(rec.get('score', 0)),
-            'extra_time_minutes': float(rec.get('extra_time_minutes', 0)),
-            'llm_approved': rec.get('llm_approved', False),
-            'detour_info': rec.get('detour_info', {}),
-            'reasons': rec.get('reasons', [])
-        }
-        
-        formatted.append(formatted_rec)
+    for i, rec in enumerate(recommendations):
+        try:
+            poi = rec.get('poi', {})
+            
+            # 安全的數值轉換
+            def safe_float(val, default=0.0):
+                try:
+                    return float(val) if val is not None else default
+                except (ValueError, TypeError):
+                    return default
+            
+            def safe_int(val, default=0):
+                try:
+                    return int(val) if val is not None else default
+                except (ValueError, TypeError):
+                    return default
+            
+            formatted_rec = {
+                'poi': {
+                    'name': str(poi.get('name', '未知地點')),
+                    'primary_category': str(poi.get('primary_category', '未分類')),
+                    'avg_rating': safe_float(poi.get('avg_rating')),
+                    'num_reviews': safe_int(poi.get('num_reviews')),
+                    'latitude': safe_float(poi.get('latitude')),
+                    'longitude': safe_float(poi.get('longitude'))
+                },
+                'score': safe_float(rec.get('score')),
+                'extra_time_minutes': safe_float(rec.get('extra_time_minutes')),
+                'llm_approved': bool(rec.get('llm_approved', False)),
+                'detour_info': rec.get('detour_info', {}),
+                'reasons': rec.get('reasons', [])
+            }
+            
+            formatted.append(formatted_rec)
+            
+        except Exception as e:
+            print(f"⚠️ 格式化第 {i+1} 個推薦時出錯: {e}")
+            # 添加簡化版本
+            formatted.append({
+                'poi': {
+                    'name': '格式化錯誤',
+                    'primary_category': '未知',
+                    'avg_rating': 0,
+                    'num_reviews': 0,
+                    'latitude': 0,
+                    'longitude': 0
+                },
+                'error': str(e)
+            })
     
     return formatted
 

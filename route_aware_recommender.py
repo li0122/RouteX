@@ -936,9 +936,40 @@ class RouteAwareRecommender:
         self,
         start_location: Tuple[float, float],
         end_location: Tuple[float, float],
-        radius_km: float = 30.0
+        radius_km: Optional[float] = None
     ) -> List[Dict]:
-        """空間索引搜索候選POI"""
+        """
+        空間索引搜索候選POI - 智能半徑調整版
+        
+        根據路線長度動態調整搜索半徑：
+        - 短途(<20km): 半徑 20km
+        - 中途(20-50km): 半徑 40km
+        - 長途(50-100km): 半徑 60km
+        - 超長途(>100km): 半徑 80km
+        """
+        
+        # 計算路線直線距離
+        route_distance = self._haversine_distance(
+            start_location[0], start_location[1],
+            end_location[0], end_location[1]
+        )
+        
+        # 根據路線長度動態調整搜索半徑
+        if radius_km is None:
+            if route_distance < 20:
+                radius_km = 20.0  # 市區短途
+            elif route_distance < 50:
+                radius_km = 40.0  # 城市間中途
+            elif route_distance < 100:
+                radius_km = 60.0  # 長途
+            elif route_distance < 200:
+                radius_km = 80.0  # 超長途
+            else:
+                # 極長途（如跨州）：使用更大半徑或路線長度的 20%
+                radius_km = min(120.0, route_distance * 0.2)
+        
+        print(f"   路線直線距離: {route_distance:.1f} km")
+        print(f"   搜索半徑: {radius_km:.1f} km")
         
         if self.spatial_index and self.spatial_index.index_built:
             # 使用空間索引
@@ -946,7 +977,7 @@ class RouteAwareRecommender:
             mid_lon = (start_location[1] + end_location[1]) / 2
             
             candidates = self.spatial_index.query_by_location(
-                mid_lat, mid_lon, radius_km, max_results=200
+                mid_lat, mid_lon, radius_km, max_results=500  # 增加最大結果數
             )
             
             self.performance_stats['spatial_index_hits'] += 1
