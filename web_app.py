@@ -90,6 +90,12 @@ def test():
     return render_template('test.html')
 
 
+@app.route('/test_leaflet')
+def test_leaflet():
+    """Leaflet 地圖測試頁面"""
+    return render_template('test_leaflet.html')
+
+
 @app.route('/api/recommend', methods=['POST'])
 def recommend():
     """推薦API端點"""
