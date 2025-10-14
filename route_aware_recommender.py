@@ -891,25 +891,12 @@ class RouteAwareRecommender:
         inference_time = time.time() - inference_start
         print(f"   模型評分完成 (耗時: {inference_time:.3f}s)")
         
-        # 5.5. 僅保留TOP候選以減少OSRM計算量
-        # 結合POI和分數
-        poi_score_pairs = list(zip(category_filtered_pois, scores))
-        # 按分數排序
-        poi_score_pairs.sort(key=lambda x: x[1], reverse=True)
-        
-        # 僅計算TOP候選的OSRM（默認top_k的3倍，確保有足夠候選給LLM審核）
-        top_candidates_count = min(len(poi_score_pairs), top_k * 3)
-        top_candidates = [p[0] for p in poi_score_pairs[:top_candidates_count]]
-        top_scores = [p[1] for p in poi_score_pairs[:top_candidates_count]]
-        
-        print(f"   📊 優化: 僅對TOP {top_candidates_count}/{len(category_filtered_pois)} 候選計算OSRM")
-        
-        # 6. 計算 OSRM 繞道信息（僅針對TOP候選）
+        # 6. 計算 OSRM 繞道信息（針對所有評分後的 POI）
         print("🚗 步驟5: 計算繞道信息...")
         osrm_start = time.time()
         
         # 提取 POI 位置
-        poi_locations = [(poi['latitude'], poi['longitude']) for poi in top_candidates]
+        poi_locations = [(poi['latitude'], poi['longitude']) for poi in category_filtered_pois]
         
         # 使用線程池並發計算（顯著提升速度）
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -950,7 +937,7 @@ class RouteAwareRecommender:
         
         # 7. 生成推薦結果
         recommendations = self._generate_recommendations(
-            top_candidates, top_scores, detours, top_k, user_profile, user_history,
+            category_filtered_pois, scores, detours, top_k, user_profile, user_history,
             start_location, end_location
         )
         
