@@ -201,21 +201,31 @@ class LeafletResultMap {
                 end
             ];
             
-            const coords = waypoints.map(wp => `${wp[1]},${wp[0]}`).join(';');
-            const url = `http://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
-            
-            const response = await fetch(url, {
-                signal: AbortSignal.timeout(15000)
+            // 調用本地 API 代理
+            const response = await fetch('/api/route', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    waypoints: waypoints,
+                    options: {
+                        geometries: 'geojson',
+                        overview: 'full'
+                    }
+                }),
+                signal: AbortSignal.timeout(20000)
             });
             
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}`);
             }
             
             const data = await response.json();
             
-            if (data.code === 'Ok' && data.routes && data.routes[0]) {
-                const route = data.routes[0];
+            if (data.code === 'Ok' && data.route && data.route.geometry) {
+                const route = data.route;
                 const coordinates = route.geometry.coordinates.map(c => [c[1], c[0]]);
                 
                 // 移除簡單路線
@@ -256,7 +266,7 @@ class LeafletResultMap {
                 console.log(`   路線點數: ${coordinates.length}`);
                 
             } else {
-                throw new Error(`OSRM 錯誤: ${data.code || 'Unknown'}`);
+                throw new Error(`路線錯誤: ${data.error || 'Unknown'}`);
             }
             
         } catch (error) {

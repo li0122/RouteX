@@ -315,6 +315,95 @@ def get_status():
     })
 
 
+@app.route('/api/route', methods=['POST'])
+def get_route():
+    """
+    獲取 OSRM 路線
+    請求格式: {
+        "waypoints": [[lat1, lng1], [lat2, lng2], ...],
+        "options": {
+            "geometries": "geojson",
+            "overview": "full",
+            "alternatives": false
+        }
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'waypoints' not in data:
+            return jsonify({'error': '缺少 waypoints 參數'}), 400
+        
+        waypoints = data['waypoints']
+        
+        if not isinstance(waypoints, list) or len(waypoints) < 2:
+            return jsonify({'error': 'waypoints 必須是至少包含 2 個點的陣列'}), 400
+        
+        # 驗證每個點的格式
+        for i, wp in enumerate(waypoints):
+            if not isinstance(wp, list) or len(wp) != 2:
+                return jsonify({'error': f'waypoint {i} 格式錯誤，應為 [lat, lng]'}), 400
+        
+        # 構建 OSRM URL
+        coords = ';'.join([f"{wp[1]},{wp[0]}" for wp in waypoints])
+        
+        # 獲取選項
+        options = data.get('options', {})
+        geometries = options.get('geometries', 'geojson')
+        overview = options.get('overview', 'full')
+        alternatives = options.get('alternatives', False)
+        
+        url = f"http://router.project-osrm.org/route/v1/driving/{coords}"
+        params = {
+            'overview': overview,
+            'geometries': geometries
+        }
+        
+        if alternatives:
+            params['alternatives'] = 'true'
+        
+        print(f"🗺️ 請求 OSRM 路線: {len(waypoints)} 個點")
+        
+        # 調用 OSRM API
+        response = requests.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        
+        osrm_data = response.json()
+        
+        if osrm_data.get('code') != 'Ok':
+            return jsonify({
+                'error': f"OSRM 錯誤: {osrm_data.get('code', 'Unknown')}",
+                'message': osrm_data.get('message', '')
+            }), 400
+        
+        # 提取路線資訊
+        route = osrm_data.get('routes', [{}])[0]
+        
+        result = {
+            'code': 'Ok',
+            'route': {
+                'geometry': route.get('geometry'),
+                'distance': route.get('distance'),  # 米
+                'duration': route.get('duration'),  # 秒
+                'legs': route.get('legs', [])
+            },
+            'waypoints': osrm_data.get('waypoints', [])
+        }
+        
+        print(f"✅ OSRM 路線成功: {route.get('distance', 0)/1000:.1f} km, {route.get('duration', 0)/60:.0f} 分鐘")
+        
+        return jsonify(result)
+        
+    except requests.Timeout:
+        return jsonify({'error': 'OSRM 請求超時'}), 504
+    except requests.RequestException as e:
+        print(f"❌ OSRM 請求失敗: {e}")
+        return jsonify({'error': f'OSRM 請求失敗: {str(e)}'}), 502
+    except Exception as e:
+        print(f"❌ 路線獲取錯誤: {e}")
+        return jsonify({'error': f'伺服器錯誤: {str(e)}'}), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """404錯誤處理"""
