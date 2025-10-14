@@ -95,15 +95,25 @@ class OSRMClient:
             
             # 使用重試機制處理暫時性失敗
             max_retries = 3
+            last_error = None
             for attempt in range(max_retries):
                 try:
-                    response = self.session.get(url, params=params, timeout=10)
+                    # 增加超時時間，第一次嘗試較短，後續增加
+                    timeout = 5 + (attempt * 5)  # 5s, 10s, 15s
+                    response = self.session.get(url, params=params, timeout=timeout)
                     response.raise_for_status()
+                    last_error = None
                     break
-                except Exception as e:
-                    if attempt == max_retries - 1:
-                        raise
-                    time.sleep(0.1 * (attempt + 1))  # 指數退避
+                except (requests.exceptions.ConnectionError, 
+                        requests.exceptions.Timeout,
+                        requests.exceptions.HTTPError) as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        wait_time = 0.5 * (2 ** attempt)  # 指數退避: 0.5s, 1s, 2s
+                        time.sleep(wait_time)
+                    else:
+                        # 最後一次失敗，使用距離估算
+                        return None
             
             data = response.json()
             
@@ -127,7 +137,12 @@ class OSRMClient:
             return None
             
         except Exception as e:
-            print(f"OSRM 請求失敗: {e}")
+            # 靜默處理，避免過多錯誤訊息
+            if 'Network is unreachable' in str(e) or 'Connection' in str(e):
+                # 網路問題，使用距離估算作為降級
+                pass
+            else:
+                print(f"⚠️ OSRM 請求異常: {type(e).__name__}")
             return None
     
     def calculate_detour(
@@ -153,11 +168,13 @@ class OSRMClient:
         try:
             # 直達路線
             direct_route = self.get_route(start, end)
+            use_estimation = False
             
             if not direct_route:
                 # 如果直達路線失敗，使用距離估算
+                use_estimation = True
                 direct_distance = self._estimate_distance(start, end) * 1000  # 轉為米
-                direct_duration = direct_distance / 15  # 假設15m/s平均速度
+                direct_duration = direct_distance / 13.89  # 假設50km/h平均速度
                 
                 direct_route = {
                     'distance': direct_distance,
@@ -165,19 +182,25 @@ class OSRMClient:
                 }
             
             # 經過waypoint的路線
-            route_1 = self.get_route(start, waypoint)
-            route_2 = self.get_route(waypoint, end)
-            
-            if not route_1 or not route_2:
-                # 如果繞道路線失敗，使用距離估算
+            if use_estimation:
+                # 如果直達已使用估算，繞道也使用估算保持一致
                 dist_1 = self._estimate_distance(start, waypoint) * 1000
                 dist_2 = self._estimate_distance(waypoint, end) * 1000
-                
                 via_distance = dist_1 + dist_2
-                via_duration = via_distance / 15
+                via_duration = via_distance / 13.89
             else:
-                via_distance = route_1['distance'] + route_2['distance']
-                via_duration = route_1['duration'] + route_2['duration']
+                route_1 = self.get_route(start, waypoint)
+                route_2 = self.get_route(waypoint, end)
+                
+                if not route_1 or not route_2:
+                    # 如果繞道路線失敗，使用距離估算
+                    dist_1 = self._estimate_distance(start, waypoint) * 1000
+                    dist_2 = self._estimate_distance(waypoint, end) * 1000
+                    via_distance = dist_1 + dist_2
+                    via_duration = via_distance / 13.89
+                else:
+                    via_distance = route_1['distance'] + route_2['distance']
+                    via_duration = route_1['duration'] + route_2['duration']
             
             extra_distance = max(0, via_distance - direct_route['distance'])
             extra_duration = max(0, via_duration - direct_route['duration'])
@@ -195,17 +218,9 @@ class OSRMClient:
             }
             
         except Exception as e:
-            # 完全失敗時的備用策略
-            print(f"   繞道計算失敗: {e}")
-            return {
-                'direct_distance': 0,
-                'direct_duration': 0,
-                'via_distance': 0,
-                'via_duration': 0,
-                'extra_distance': 0,
-                'extra_duration': 0,
-                'detour_ratio': 0
-            }
+            # 完全失敗時的備用策略 - 返回None讓上層處理
+            # 避免過多錯誤訊息
+            return None
     
     def _estimate_distance(self, start: Tuple[float, float], end: Tuple[float, float]) -> float:
         """估算兩點間距離(公里)"""
@@ -906,6 +921,9 @@ class RouteAwareRecommender:
         print(f"   使用 {max_workers} 個並發線程")
         
         detours = [None] * len(poi_locations)
+        failed_count = 0
+        network_error_count = 0
+        
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 提交所有任務
             future_to_idx = {
@@ -921,19 +939,51 @@ class RouteAwareRecommender:
             for future in as_completed(future_to_idx):
                 idx = future_to_idx[future]
                 try:
-                    detours[idx] = future.result()
+                    result = future.result()
+                    if result is None:
+                        # OSRM失敗，使用地理距離估算作為備用
+                        failed_count += 1
+                        poi = category_filtered_pois[idx]
+                        poi_loc = (poi['latitude'], poi['longitude'])
+                        
+                        # 使用地理距離估算
+                        direct_dist = self.osrm_client._estimate_distance(start_location, end_location) * 1000
+                        dist_to_poi = self.osrm_client._estimate_distance(start_location, poi_loc) * 1000
+                        poi_to_end = self.osrm_client._estimate_distance(poi_loc, end_location) * 1000
+                        
+                        detours[idx] = {
+                            'direct_distance': direct_dist,
+                            'direct_duration': direct_dist / 13.89,
+                            'via_distance': dist_to_poi + poi_to_end,
+                            'via_duration': (dist_to_poi + poi_to_end) / 13.89,
+                            'extra_distance': max(0, (dist_to_poi + poi_to_end) - direct_dist),
+                            'extra_duration': max(0, ((dist_to_poi + poi_to_end) - direct_dist) / 13.89),
+                            'detour_ratio': (dist_to_poi + poi_to_end) / direct_dist if direct_dist > 0 else 1.0,
+                            'estimated': True  # 標記為估算值
+                        }
+                    else:
+                        detours[idx] = result
+                    
                     completed += 1
-                    if completed % 10 == 0:
+                    if completed % 20 == 0 or completed == len(poi_locations):
                         print(f"   進度: {completed}/{len(poi_locations)}")
+                        
                 except Exception as e:
-                    print(f"   POI {idx} 計算失敗: {e}")
+                    # 靜默處理，使用估算值
+                    network_error_count += 1
                     detours[idx] = None
         
         osrm_time = time.time() - osrm_start
         valid_detours = [d for d in detours if d and d.get('detour_ratio', 0) > 0]
+        estimated_detours = [d for d in detours if d and d.get('estimated', False)]
+        
         print(f"   繞道計算完成: {len(valid_detours)}/{len(detours)} 個有效 (耗時: {osrm_time:.3f}s)")
         if osrm_time > 0:
             print(f"   平均速度: {len(detours)/osrm_time:.1f} POI/秒 (並發模式)")
+        if failed_count > 0:
+            print(f"   ⚠️ {failed_count} 個使用地理估算 (OSRM暫時不可用)")
+        if estimated_detours:
+            print(f"   📏 {len(estimated_detours)} 個使用估算值")
         
         # 7. 生成推薦結果
         recommendations = self._generate_recommendations(
