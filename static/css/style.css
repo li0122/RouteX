@@ -315,6 +315,50 @@ body {
     font-size: 1.1rem;
 }
 
+.card-location {
+    margin: 12px 0;
+    padding: 10px 12px;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border-left: 3px solid var(--primary-color);
+    border-radius: 6px;
+}
+
+.location-coords {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+.location-coords i {
+    color: var(--primary-color);
+    font-size: 1rem;
+}
+
+.coord-label {
+    font-weight: 600;
+    color: var(--dark-color);
+}
+
+.coord-value {
+    font-family: 'Courier New', monospace;
+    color: #1e40af;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.coord-value:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.coord-value .lat,
+.coord-value .lng {
+    font-weight: 600;
+}
+
 .card-details {
     background: var(--light-color);
     padding: 15px;

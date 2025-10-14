@@ -319,9 +319,16 @@ function createRecommendationCard(rec, rank) {
                     <i class="fas fa-clock"></i>
                     <span>+${rec.extra_time_minutes ? rec.extra_time_minutes.toFixed(1) : 'N/A'} 分鐘</span>
                 </div>
-                <div class="info-item">
-                    <i class="fas fa-map-pin"></i>
-                    <span>${poi.latitude.toFixed(4)}, ${poi.longitude.toFixed(4)}</span>
+            </div>
+            
+            <div class="card-location">
+                <div class="location-coords">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <span class="coord-label">座標:</span>
+                    <span class="coord-value" title="點擊複製座標">
+                        <span class="lat">${poi.latitude.toFixed(6)}</span>, 
+                        <span class="lng">${poi.longitude.toFixed(6)}</span>
+                    </span>
                 </div>
             </div>
             
@@ -345,6 +352,27 @@ function createRecommendationCard(rec, rank) {
             </div>
         </div>
     `;
+    
+    // 添加點擊複製座標功能
+    const coordValue = card.querySelector('.coord-value');
+    if (coordValue) {
+        coordValue.addEventListener('click', function() {
+            const coordText = `${poi.latitude}, ${poi.longitude}`;
+            navigator.clipboard.writeText(coordText).then(() => {
+                // 顯示複製成功提示
+                const originalTitle = coordValue.getAttribute('title');
+                coordValue.setAttribute('title', '已複製! ✓');
+                coordValue.style.background = 'rgba(34, 197, 94, 0.1)';
+                
+                setTimeout(() => {
+                    coordValue.setAttribute('title', originalTitle);
+                    coordValue.style.background = '';
+                }, 1500);
+            }).catch(err => {
+                console.error('複製失敗:', err);
+            });
+        });
+    }
     
     return card;
 }
