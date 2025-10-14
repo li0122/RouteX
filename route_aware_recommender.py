@@ -838,7 +838,7 @@ class RouteAwareRecommender:
                 return []
         
         # 3. LLM類別篩選（取代OSRM路線過濾）
-        print("🤖 步驟3: LLM智能類別篩選...")
+        print("步驟3: LLM智能類別篩選...")
         llm_start = time.time()
         
         # 提取所有唯一類別

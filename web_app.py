@@ -175,6 +175,7 @@ def recommend():
                 user_history=user_history,
                 start_location=tuple(start_location),
                 end_location=tuple(end_location),
+                activityIntent=activity_intent if activity_intent else "旅遊探索",
                 top_k=top_k,
                 max_detour_ratio=1.3,
                 max_extra_duration=900
