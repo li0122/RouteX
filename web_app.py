@@ -8,6 +8,7 @@ from flask_cors import CORS
 import torch
 import os
 import sys
+import requests
 
 # 添加當前目錄到路徑
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
