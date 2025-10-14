@@ -200,10 +200,15 @@ class LeafletMapPicker {
             </div>
         `).openPopup();
         
-        // 更新顯示
-        document.getElementById('startLocationDisplay').textContent = 
-            `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-        document.getElementById('startLocation').value = `${lat},${lng}`;
+        // 更新顯示（如果元素存在）
+        const startDisplay = document.getElementById('startLocationDisplay');
+        if (startDisplay) {
+            startDisplay.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        }
+        const startInput = document.getElementById('startLocation');
+        if (startInput) {
+            startInput.value = `${lat},${lng}`;
+        }
         
         // 更新路線
         this.updateRouteLine();
@@ -239,10 +244,15 @@ class LeafletMapPicker {
             </div>
         `).openPopup();
         
-        // 更新顯示
-        document.getElementById('endLocationDisplay').textContent = 
-            `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-        document.getElementById('endLocation').value = `${lat},${lng}`;
+        // 更新顯示（如果元素存在）
+        const endDisplay = document.getElementById('endLocationDisplay');
+        if (endDisplay) {
+            endDisplay.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        }
+        const endInput = document.getElementById('endLocation');
+        if (endInput) {
+            endInput.value = `${lat},${lng}`;
+        }
         
         // 更新路線
         this.updateRouteLine();
