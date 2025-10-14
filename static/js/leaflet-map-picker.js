@@ -20,7 +20,7 @@ class LeafletMapPicker {
             zoom: 12,
             minZoom: 8,
             maxZoom: 18,
-            useMBTiles: false,  // 是否使用離線 MBTiles
+            useMBTiles: true,  // 是否使用離線 MBTiles
             mbtilesPath: '/static/data/sf_bay_area.mbtiles',
             ...options
         };
