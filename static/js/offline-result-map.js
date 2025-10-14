@@ -125,7 +125,7 @@ class OfflineResultMap {
         
         this.ctx.setLineDash([]);
     }
-    
+    //FIX: back HISTORY;
     drawRoute() {
         if (!this.startLocation || !this.endLocation) return;
         
