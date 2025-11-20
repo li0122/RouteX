@@ -688,9 +688,7 @@ class RouteAwareRecommender:
         osrm_client: Optional[OSRMClient] = None,
         device: str = 'cpu',
         enable_spatial_index: bool = True,
-        enable_async: bool = True,
-        enable_llm_filter: bool = False,
-        enable_llm_concurrent: bool = True  # 新增：啟用LLM併發
+        enable_async: bool = True
     ):
         self.model = model
         self.poi_processor = poi_processor
@@ -698,7 +696,6 @@ class RouteAwareRecommender:
         self.device = torch.device(device)
         self.user_preference_model = UserPreferenceModel()
         self.enable_async = enable_async and ASYNC_SUPPORTED
-        self.enable_llm_concurrent = enable_llm_concurrent  # 儲存併發設置
         
         # 初始化空間索引
         if enable_spatial_index:
@@ -737,15 +734,13 @@ class RouteAwareRecommender:
             'async_requests_count': 0
         }
         
-        # 初始化LLM過濾器
-        self.enable_llm_filter = enable_llm_filter and LLM_FILTER_AVAILABLE
-        if self.enable_llm_filter:
+        # 初始化LLM服務（用於類別篩選和行程生成）
+        if LLM_FILTER_AVAILABLE:
             try:
                 self.llm_filter = SimpleLLMFilter()
-                print(f"✅ LLM過濾器初始化成功")
+                print(f"✅ LLM服務初始化成功（用於類別篩選和行程生成）")
             except Exception as e:
-                print(f"⚠️ LLM過濾器初始化失敗: {e}")
-                self.enable_llm_filter = False
+                print(f"⚠️ LLM服務初始化失敗: {e}")
                 self.llm_filter = None
         else:
             self.llm_filter = None
@@ -758,11 +753,8 @@ class RouteAwareRecommender:
         print(f"   - 空間索引: {enabled_text}")
         async_text = "啟用" if self.enable_async else "禁用"
         print(f"   - 異步支持: {async_text}")
-        llm_text = "啟用" if self.enable_llm_filter else "禁用"
-        print(f"   - LLM過濾器: {llm_text}")
-        if self.enable_llm_filter:
-            concurrent_text = "啟用" if self.enable_llm_concurrent else "禁用"
-            print(f"   - LLM併發: {concurrent_text}")
+        llm_text = "可用" if self.llm_filter else "不可用"
+        print(f"   - LLM服務: {llm_text}（類別篩選和行程生成）")
     
     def recommend_on_route(
         self,
@@ -1076,7 +1068,7 @@ class RouteAwareRecommender:
         # 步驟 3: 使用 LLM 組合成行程
         print(f"\n🤖 步驟3: LLM 組合旅遊行程...")
         
-        if not self.enable_llm_filter or not self.llm_filter:
+        if not self.llm_filter:
             print("⚠️ LLM 不可用，使用備用行程生成")
             itinerary_result = self._fallback_itinerary_generation(reranked[:10])
         else:
@@ -1191,8 +1183,8 @@ class RouteAwareRecommender:
         Returns:
             符合需求的類別列表
         """
-        if not self.enable_llm_filter or not self.llm_filter:
-            print("⚠️ LLM過濾器不可用，返回所有類別")
+        if not self.llm_filter:
+            print("⚠️ LLM服務不可用，返回所有類別")
             return all_categories
         
         # 構建prompt
@@ -1841,71 +1833,8 @@ Do NOT include explanations, just return the comma-separated category list."""
         # 按分數排序
         recommendations.sort(key=lambda x: x['score'], reverse=True)
         
-        # 🎯 核心功能：LLM逐一審核
-        if self.enable_llm_filter and self.llm_filter:
-            print(f"\n🤖 開始LLM逐一審核流程...")
-            print(f"   目標: TOP {top_k} 旅遊推薦")
-            print(f"   候選: {len(recommendations)} 個排序結果")
-            
-            # 提取用戶偏好類別
-            user_categories = []
-            if user_history:
-                user_categories = list(set([
-                    item.get('category') 
-                    for item in user_history 
-                    if item.get('category')
-                ]))
-            
-            if user_categories:
-                print(f"   用戶偏好類別: {', '.join(user_categories)}")
-            
-            # 提取POI用於LLM審核
-            ranked_pois = [rec['poi'] for rec in recommendations]
-            
-            # 根據配置選擇併發或順序模式
-            if self.enable_llm_concurrent:
-                # 使用併發版本（顯著提升速度）
-                approved_pois = self.llm_filter.sequential_llm_filter_top_k_concurrent(
-                    ranked_pois, 
-                    target_k=top_k,
-                    start_location=start_location,
-                    end_location=end_location,
-                    batch_size=10,  # 每批次併發10個
-                    user_categories=user_categories if user_categories else None,
-                    early_stop=True,
-                    early_stop_buffer=1.5
-                )
-            else:
-                # 使用順序版本（兼容模式）
-                approved_pois = self.llm_filter.sequential_llm_filter_top_k(
-                    ranked_pois, 
-                    target_k=top_k,
-                    start_location=start_location,
-                    end_location=end_location,
-                    multiplier=3,
-                    user_categories=user_categories if user_categories else None,
-                    early_stop=True,
-                    early_stop_buffer=1.5
-                )
-            
-            # 重新構建推薦結果（保持原始分數和詳細資訊）
-            final_recommendations = []
-            for approved_poi in approved_pois:
-                # 找到對應的原始推薦資訊
-                for rec in recommendations:
-                    if rec['poi'] == approved_poi:
-                        # 添加LLM審核標記
-                        rec['llm_approved'] = True
-                        final_recommendations.append(rec)
-                        break
-            
-            print(f"\n✅ LLM審核完成!")
-            print(f"   最終推薦: {len(final_recommendations)} 個")
-            
-            return final_recommendations
-        else:
-            # 不使用LLM過濾，直接返回top-k
-            return recommendations[:top_k]
+        # 直接返回 top-k 結果（已移除 POI 逐一審核功能）
+        return recommendations[:top_k]
     
     def _update_performance_stats(self, total_time: float):
         """更新性能統計"""

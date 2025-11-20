@@ -64,10 +64,6 @@ def init_recommender():
         # 設置OSRM客戶端
         recommender.osrm_client = osrm_client
         
-        # 預設不啟用LLM（按需啟用）
-        recommender.enable_llm_filter = False
-        recommender.llm_filter = None
-        
         print("推薦系統初始化完成！")
         print(f"   設備: {recommender.device}")
         print(f"   空間索引: {'已啟用' if recommender.spatial_index else '未啟用'}")
@@ -121,20 +117,6 @@ def recommend():
         # 獲取可選參數
         categories = data.get('categories', [])
         top_k = data.get('top_k', 5)
-        enable_llm = data.get('enable_llm', False)
-        
-        # 設置LLM過濾器
-        if enable_llm and not recommender.enable_llm_filter:
-            try:
-                recommender.enable_llm_filter = True
-                recommender.llm_filter = SimpleLLMFilter()
-                print("✅ LLM過濾器已啟用")
-            except Exception as e:
-                print(f"⚠️ LLM過濾器啟用失敗: {e}")
-                recommender.enable_llm_filter = False
-        elif not enable_llm and recommender.enable_llm_filter:
-            recommender.enable_llm_filter = False
-            print("ℹ️ LLM過濾器已禁用")
         
         print(f"\n📍 收到推薦請求:")
         print(f"   起點: {start_location}")
@@ -147,7 +129,6 @@ def recommend():
         
         print(f"   類別偏好: {categories}")
         print(f"   推薦數量: {top_k}")
-        print(f"   LLM過濾: {enable_llm}")
         
         # 構建用戶歷史
         user_history = []
@@ -395,7 +376,7 @@ def get_status():
         'recommender_initialized': recommender is not None,
         'device': str(recommender.device) if recommender else None,
         'spatial_index_enabled': recommender.spatial_index is not None if recommender else False,
-        'llm_filter_available': recommender.enable_llm_filter if recommender else False
+        'llm_service_available': recommender.llm_filter is not None if recommender else False
     })
 
 
