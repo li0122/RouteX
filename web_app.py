@@ -49,7 +49,7 @@ def init_recommender():
     
     try:
         # 創建OSRM客戶端
-        osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
+        osrm_client = OSRMClient(server_url="http://140.125.32.60:5000")
         print("✅ OSRM客戶端創建成功")
         
         # 創建推薦器
@@ -417,7 +417,7 @@ def get_route():
         overview = options.get('overview', 'full')
         alternatives = options.get('alternatives', False)
         
-        url = f"http://router.project-osrm.org/route/v1/driving/{coords}"
+        url = f"http://140.125.32.60:5000/route/v1/driving/{coords}"
         params = {
             'overview': overview,
             'geometries': geometries
