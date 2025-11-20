@@ -305,6 +305,88 @@ def get_categories():
     })
 
 
+@app.route('/api/itinerary', methods=['POST'])
+def recommend_itinerary():
+    """
+    推薦完整旅遊行程 API（新功能）
+    
+    請求格式: {
+        "start": [lat, lng],
+        "end": [lat, lng],
+        "activity_intent": "旅遊探索",
+        "time_budget": 240,  // 可選，分鐘
+        "top_k": 20,  // 可選
+        "user_id": "user_123",  // 可選
+        "user_history": []  // 可選
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        # 驗證必要參數
+        if not data or 'start' not in data or 'end' not in data:
+            return jsonify({'error': '缺少 start 或 end 參數'}), 400
+        
+        start = tuple(data['start'])
+        end = tuple(data['end'])
+        activity_intent = data.get('activity_intent', '旅遊探索')
+        time_budget = data.get('time_budget')
+        top_k = data.get('top_k', 20)
+        user_id = data.get('user_id', 'default_user')
+        user_history = data.get('user_history', [])
+        
+        if not recommender:
+            return jsonify({'error': '推薦系統未初始化'}), 500
+        
+        # 呼叫行程推薦
+        result = recommender.recommend_itinerary(
+            user_id=user_id,
+            user_history=user_history,
+            start_location=start,
+            end_location=end,
+            activityIntent=activity_intent,
+            top_k=top_k,
+            time_budget=time_budget
+        )
+        
+        # 格式化回應
+        formatted_itinerary = []
+        for item in result.get('itinerary', []):
+            poi = item['poi']
+            formatted_itinerary.append({
+                'order': item['order'],
+                'poi': {
+                    'name': poi.get('name', 'Unknown'),
+                    'category': poi.get('primary_category', poi.get('category', 'N/A')),
+                    'latitude': poi.get('latitude'),
+                    'longitude': poi.get('longitude'),
+                    'rating': poi.get('avg_rating'),
+                    'address': poi.get('address', ''),
+                    'price_level': poi.get('price_level')
+                },
+                'reason': item.get('reason', ''),
+                'estimated_duration': item.get('estimated_duration', 60),
+                'score': poi.get('score', 0)
+            })
+        
+        return jsonify({
+            'success': True,
+            'itinerary': formatted_itinerary,
+            'total_duration': result.get('total_duration', 0),
+            'total_distance': result.get('total_distance', 0),
+            'summary': result.get('summary', ''),
+            'tips': result.get('tips', []),
+            'start': list(start),
+            'end': list(end)
+        })
+        
+    except Exception as e:
+        print(f"行程推薦錯誤: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     """獲取系統狀態"""

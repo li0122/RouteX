@@ -22,8 +22,8 @@ class SimpleLLMFilter:
     
     def __init__(
         self,
-        base_url: str = "140.125.248.15:31008",
-        model: str = "nvidia/llama-3.3-nemotron-super-49b-v1",
+        base_url: str = "140.125.248.15:30020",
+        model: str = "meta/llama3-70b-instruct",
         timeout: int = 30,
         delay_between_requests: float = 0.5,
         max_concurrent: int = 5  # 新增：最大併發數
@@ -711,6 +711,209 @@ Now please evaluate:"""
         
         # 預設為適合
         return True
+    
+    def generate_itinerary(
+        self,
+        pois: List[Dict[str, Any]],
+        start_location: Tuple[float, float],
+        end_location: Tuple[float, float],
+        activity_intent: str = "旅遊探索",
+        time_budget: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        使用 LLM 將 POI 列表組合成合理的旅遊行程
+        
+        Args:
+            pois: POI 列表（已經過 reranking）
+            start_location: 起點座標 (lat, lon)
+            end_location: 終點座標 (lat, lon)
+            activity_intent: 活動意圖/需求
+            time_budget: 時間預算（分鐘），可選
+        
+        Returns:
+            {
+                'itinerary': [
+                    {
+                        'order': 1,
+                        'poi': {...},
+                        'reason': '選擇理由',
+                        'estimated_duration': 60,  # 建議停留時間（分鐘）
+                    },
+                    ...
+                ],
+                'total_duration': 180,  # 總時間（分鐘）
+                'total_distance': 15.5,  # 總距離（公里）
+                'summary': '行程摘要說明',
+                'tips': ['建議1', '建議2', ...]
+            }
+        """
+        try:
+            # 構建行程規劃 prompt
+            prompt = self._build_itinerary_prompt(
+                pois, start_location, end_location, activity_intent, time_budget
+            )
+            
+            # 調用 LLM
+            response = self._call_llm(prompt, temperature=0.7, max_tokens=2000)
+            
+            if response:
+                # 解析行程
+                return self._parse_itinerary_response(response, pois)
+            else:
+                # 失敗時返回簡單序列
+                return self._fallback_itinerary(pois)
+                
+        except Exception as e:
+            print(f"⚠️ LLM 行程生成失敗: {e}")
+            return self._fallback_itinerary(pois)
+    
+    def _build_itinerary_prompt(
+        self,
+        pois: List[Dict[str, Any]],
+        start_location: Tuple[float, float],
+        end_location: Tuple[float, float],
+        activity_intent: str,
+        time_budget: Optional[int]
+    ) -> str:
+        """構建行程規劃 prompt"""
+        
+        # POI 信息
+        poi_info = []
+        for idx, poi in enumerate(pois, 1):
+            info = f"{idx}. {poi.get('name', 'Unknown')}"
+            info += f" ({poi.get('primary_category', poi.get('category', 'N/A'))})"
+            
+            if 'avg_rating' in poi:
+                info += f" - 評分: {poi['avg_rating']:.1f}⭐"
+            
+            if 'detour_info' in poi and poi['detour_info']:
+                extra_time = poi['detour_info'].get('extra_duration', 0) / 60.0
+                info += f" - 繞道: +{extra_time:.0f}分鐘"
+            
+            if 'score' in poi:
+                info += f" - 推薦分數: {poi['score']:.2f}"
+            
+            poi_info.append(info)
+        
+        poi_list_str = "\n".join(poi_info)
+        
+        time_constraint = f"\n時間預算: {time_budget} 分鐘" if time_budget else ""
+        
+        prompt = f"""你是一位專業的旅遊行程規劃師。請根據以下信息規劃一個合理的旅遊行程。
+
+起點座標: {start_location[0]:.6f}, {start_location[1]:.6f}
+終點座標: {end_location[0]:.6f}, {end_location[1]:.6f}
+旅遊需求: {activity_intent}{time_constraint}
+
+候選景點（已按推薦程度排序）:
+{poi_list_str}
+
+請規劃一個**合理的旅遊行程**，考慮：
+1. 地理位置順序（避免來回繞路）
+2. 景點類型搭配（豐富度和多樣性）
+3. 時間分配（每個景點建議停留時間）
+4. 整體路線流暢性
+
+請以以下 JSON 格式回覆（**只回覆 JSON，不要其他文字**）:
+{{
+  "selected_pois": [
+    {{
+      "poi_index": 1,
+      "order": 1,
+      "reason": "選擇理由",
+      "estimated_duration_minutes": 60
+    }}
+  ],
+  "summary": "整體行程摘要說明",
+  "tips": ["建議1", "建議2"]
+}}
+
+注意：
+- poi_index 是原始列表的編號（1-based）
+- order 是行程中的順序（1-based）
+- 選擇 3-7 個景點為佳
+- 確保路線合理，避免過度繞路"""
+
+        return prompt
+    
+    def _parse_itinerary_response(
+        self,
+        response: str,
+        pois: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """解析 LLM 的行程回覆"""
+        try:
+            # 嘗試提取 JSON
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                response = json_match.group()
+            
+            data = json.loads(response)
+            
+            # 構建行程
+            itinerary = []
+            total_duration = 0
+            
+            for item in data.get('selected_pois', []):
+                poi_idx = item.get('poi_index', 0) - 1  # 轉為 0-based
+                
+                if 0 <= poi_idx < len(pois):
+                    poi = pois[poi_idx]
+                    duration = item.get('estimated_duration_minutes', 60)
+                    
+                    itinerary.append({
+                        'order': item.get('order', len(itinerary) + 1),
+                        'poi': poi,
+                        'reason': item.get('reason', ''),
+                        'estimated_duration': duration
+                    })
+                    
+                    total_duration += duration
+            
+            # 計算總距離（概估）
+            total_distance = 0.0
+            for poi in itinerary:
+                if 'detour_info' in poi['poi'] and poi['poi']['detour_info']:
+                    extra_dist = poi['poi']['detour_info'].get('extra_distance', 0) / 1000.0
+                    total_distance += extra_dist
+            
+            return {
+                'itinerary': itinerary,
+                'total_duration': total_duration,
+                'total_distance': total_distance,
+                'summary': data.get('summary', '精彩的旅遊行程'),
+                'tips': data.get('tips', [])
+            }
+            
+        except Exception as e:
+            print(f"⚠️ 解析行程回覆失敗: {e}")
+            print(f"   原始回覆: {response[:200]}")
+            return self._fallback_itinerary(pois)
+    
+    def _fallback_itinerary(self, pois: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """備用行程生成（簡單按順序）"""
+        itinerary = []
+        total_duration = 0
+        
+        # 最多選擇前 5 個
+        for idx, poi in enumerate(pois[:5], 1):
+            duration = 60  # 預設 60 分鐘
+            itinerary.append({
+                'order': idx,
+                'poi': poi,
+                'reason': '推薦景點',
+                'estimated_duration': duration
+            })
+            total_duration += duration
+        
+        return {
+            'itinerary': itinerary,
+            'total_duration': total_duration,
+            'total_distance': 0.0,
+            'summary': '按推薦順序安排的行程',
+            'tips': ['這是備用行程安排']
+        }
 
 
 # 測試函數

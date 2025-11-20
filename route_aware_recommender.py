@@ -43,7 +43,7 @@ except ImportError:
 class OSRMClient:
     """OSRM 路徑規劃客戶端 - 優化版"""
     
-    def __init__(self, server_url: str = "http://router.project-osrm.org"):
+    def __init__(self, server_url: str = "http://140.125.32.60:5000"):
         self.server_url = server_url
         self.cache_size = 10000  # 增加緩存大小從1000到10000
         # 使用 Session 連接池提升性能
@@ -999,6 +999,182 @@ class RouteAwareRecommender:
         print(f"   最終推薦: {len(recommendations)} 個")
         
         return recommendations
+    
+    def recommend_itinerary(
+        self,
+        user_id: str,
+        user_history: List[Dict],
+        start_location: Tuple[float, float],
+        end_location: Tuple[float, float],
+        activityIntent: str = "旅遊探索",
+        candidate_pois: Optional[List[Dict]] = None,
+        top_k: int = 20,
+        time_budget: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        推薦完整旅遊行程（新功能）
+        
+        流程：
+        1. 使用 DLRM 排出 Top-K 候選
+        2. 加入繞道成本進行 reranking
+        3. 使用 LLM 組合成合理的旅遊行程
+        
+        Args:
+            user_id: 用戶ID
+            user_history: 用戶歷史記錄
+            start_location: 起點 (lat, lon)
+            end_location: 終點 (lat, lon)
+            activityIntent: 使用者活動意圖/需求描述
+            candidate_pois: 候選POI列表 (None則自動搜索)
+            top_k: DLRM 排序的候選數量
+            time_budget: 時間預算（分鐘），可選
+        
+        Returns:
+            完整行程字典，包含：
+            - itinerary: 行程列表
+            - total_duration: 總時間
+            - total_distance: 總距離
+            - summary: 行程摘要
+            - tips: 旅遊建議
+        """
+        start_time = time.time()
+        
+        print(f"🗺️ 開始行程推薦: {start_location} → {end_location}")
+        print(f"   活動需求: {activityIntent}")
+        if time_budget:
+            print(f"   時間預算: {time_budget} 分鐘")
+        
+        # 步驟 1: 使用 DLRM 獲取 Top-K 推薦
+        print(f"\n📊 步驟1: DLRM 排序 Top-{top_k} 候選...")
+        recommendations = self.recommend_on_route(
+            user_id=user_id,
+            user_history=user_history,
+            start_location=start_location,
+            end_location=end_location,
+            activityIntent=activityIntent,
+            candidate_pois=candidate_pois,
+            top_k=top_k
+        )
+        
+        if not recommendations:
+            print("❌ 沒有推薦結果")
+            return {
+                'itinerary': [],
+                'total_duration': 0,
+                'total_distance': 0,
+                'summary': '無可用行程',
+                'tips': []
+            }
+        
+        print(f"✓ 獲得 {len(recommendations)} 個候選景點")
+        
+        # 步驟 2: 基於繞道成本進行 reranking
+        print(f"\n🔄 步驟2: 基於繞道成本 Reranking...")
+        reranked = self._rerank_by_detour_cost(recommendations)
+        print(f"✓ Reranking 完成")
+        
+        # 步驟 3: 使用 LLM 組合成行程
+        print(f"\n🤖 步驟3: LLM 組合旅遊行程...")
+        
+        if not self.enable_llm_filter or not self.llm_filter:
+            print("⚠️ LLM 不可用，使用備用行程生成")
+            itinerary_result = self._fallback_itinerary_generation(reranked[:10])
+        else:
+            itinerary_result = self.llm_filter.generate_itinerary(
+                pois=reranked[:15],  # 傳遞前 15 個給 LLM 選擇
+                start_location=start_location,
+                end_location=end_location,
+                activity_intent=activityIntent,
+                time_budget=time_budget
+            )
+        
+        total_time = time.time() - start_time
+        
+        print(f"\n✅ 行程推薦完成! 總耗時: {total_time:.3f}s")
+        print(f"   行程景點數: {len(itinerary_result.get('itinerary', []))}")
+        print(f"   預計總時間: {itinerary_result.get('total_duration', 0)} 分鐘")
+        
+        return itinerary_result
+    
+    def _rerank_by_detour_cost(self, recommendations: List[Dict]) -> List[Dict]:
+        """
+        基於繞道成本對推薦結果進行 reranking
+        
+        綜合考慮：
+        - DLRM 評分（原始推薦分數）
+        - 繞道時間成本
+        - 繞道距離成本
+        
+        Args:
+            recommendations: 原始推薦列表
+        
+        Returns:
+            重新排序的推薦列表
+        """
+        reranked = []
+        
+        for rec in recommendations:
+            dlrm_score = rec.get('score', 0.5)
+            detour_info = rec.get('detour_info', {})
+            
+            if detour_info and detour_info.get('extra_duration'):
+                # 繞道時間懲罰（分鐘）
+                extra_time_minutes = detour_info.get('extra_duration', 0) / 60.0
+                detour_ratio = detour_info.get('detour_ratio', 1.0)
+                
+                # 計算綜合分數
+                # 時間懲罰：每多繞 10 分鐘扣 0.1 分
+                time_penalty = min(0.3, extra_time_minutes / 100.0)
+                
+                # 繞道比例懲罰：繞道比例超過 1.2 開始懲罰
+                ratio_penalty = max(0, (detour_ratio - 1.2) * 0.5)
+                
+                # 綜合分數 = DLRM分數 - 時間懲罰 - 比例懲罰
+                combined_score = dlrm_score - time_penalty - ratio_penalty
+            else:
+                # 沒有繞道信息，使用原始分數
+                combined_score = dlrm_score
+            
+            # 保存重新計算的分數
+            rec['combined_score'] = max(0, combined_score)
+            reranked.append(rec)
+        
+        # 按綜合分數排序
+        reranked.sort(key=lambda x: x['combined_score'], reverse=True)
+        
+        return reranked
+    
+    def _fallback_itinerary_generation(self, pois: List[Dict]) -> Dict[str, Any]:
+        """備用行程生成（LLM 不可用時）"""
+        itinerary = []
+        total_duration = 0
+        total_distance = 0.0
+        
+        for idx, rec in enumerate(pois[:5], 1):
+            poi = rec.get('poi', {})
+            detour_info = rec.get('detour_info', {})
+            
+            duration = 60  # 預設 60 分鐘
+            
+            itinerary.append({
+                'order': idx,
+                'poi': poi,
+                'reason': f"推薦分數: {rec.get('score', 0):.2f}",
+                'estimated_duration': duration
+            })
+            
+            total_duration += duration
+            
+            if detour_info:
+                total_distance += detour_info.get('extra_distance', 0) / 1000.0
+        
+        return {
+            'itinerary': itinerary,
+            'total_duration': total_duration,
+            'total_distance': total_distance,
+            'summary': '按推薦分數和繞道成本排序的行程',
+            'tips': ['這是系統自動安排的行程']
+        }
     
     def _llm_filter_categories(
         self,
