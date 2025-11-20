@@ -57,7 +57,7 @@ class LeafletResultMap {
         }
     }
 
-    setData(data) {
+    setData(data, mode = 'poi') {
         // 清除舊數據
         this.clearMap();
         
@@ -66,6 +66,7 @@ class LeafletResultMap {
         this.startLocation = start_location;
         this.endLocation = end_location;
         this.pois = recommendations;
+        this.mode = mode; // 保存模式：'poi' 或 'itinerary'
         
         // 添加標記
         this.addStartMarker(start_location);
@@ -176,7 +177,26 @@ class LeafletResultMap {
     
     drawSimpleRoute(start, recommendations, end) {
         // 單點推薦模式：不自動繪製路徑，等待用戶點擊
-        console.log('📍 單點推薦模式：路徑隱藏，點擊卡片顯示');
+        if (this.mode === 'poi') {
+            console.log('📍 單點推薦模式：路徑隱藏，點擊卡片顯示');
+            return;
+        }
+        
+        // 行程推薦模式：繪製簡單路線
+        const points = [
+            start,
+            ...recommendations.map(r => [r.poi.latitude, r.poi.longitude]),
+            end
+        ];
+        
+        this.routeLine = L.polyline(points, {
+            color: '#9ca3af',
+            weight: 3,
+            opacity: 0.5,
+            dashArray: '10, 10'
+        }).addTo(this.map);
+        
+        console.log('📍 繪製簡單路線（行程模式）');
     }
     
     async showSinglePOIRoute(poiIndex) {
@@ -285,10 +305,13 @@ class LeafletResultMap {
     }
     
     async fetchAndDrawOSRM(start, recommendations, end) {
-        // 單點推薦模式：不自動繪製完整路線
-        console.log('⏸️ 單點推薦模式：跳過自動路線繪製');
-        return;
+        // 單點推薦模式：不自動繪裭完整路線
+        if (this.mode === 'poi') {
+            console.log('⏸️ 單點推薦模式：跳過自動路線繪裭');
+            return;
+        }
         
+        // 行程推薦模式：繪裭 OSRM 路線
         try {
             console.log('🚗 開始請求 OSRM 路線...');
             

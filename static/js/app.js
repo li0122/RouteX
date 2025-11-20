@@ -386,8 +386,11 @@ function initItineraryMap(itinerary) {
     
     console.log('📍 路線數據:', routeData);
     
+    // 保存到全局變量供卡片點擊使用
+    window.map = map;
+    
     try {
-        map.setData(routeData);
+        map.setData(routeData, 'itinerary'); // 傳遞 'itinerary' 模式
     } catch (error) {
         console.error('❌ 地圖初始化錯誤:', error);
     }
