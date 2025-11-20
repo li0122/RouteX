@@ -1154,7 +1154,10 @@ class RouteAwareRecommender:
     ) -> List[Dict]:
         """
         優化POI訪問順序（最短路徑）
-        使用貪婪最近鄰 + 2-opt 優化算法
+        使用多階段優化策略：
+        1. 貪婪最近鄰獲得初始解
+        2. 改進的 2-opt 優化（增量計算）
+        3. Or-opt 優化（移動連續子序列）
         
         Args:
             recommendations: 推薦列表
@@ -1168,6 +1171,40 @@ class RouteAwareRecommender:
             return recommendations
         
         # 步驟1: 貪婪最近鄰獲得初始解
+        ordered = self._greedy_nearest_neighbor(recommendations, start_location, end_location)
+        initial_distance = self._calculate_route_distance(ordered, start_location, end_location)
+        
+        # 步驟2: 改進的 2-opt 優化
+        ordered = self._improved_two_opt(ordered, start_location, end_location)
+        after_2opt_distance = self._calculate_route_distance(ordered, start_location, end_location)
+        
+        # 步驟3: Or-opt 優化（針對小段路徑）
+        ordered = self._or_opt_optimization(ordered, start_location, end_location)
+        final_distance = self._calculate_route_distance(ordered, start_location, end_location)
+        
+        improvement = ((initial_distance - final_distance) / initial_distance * 100) if initial_distance > 0 else 0
+        
+        # 更新order編號
+        for idx, rec in enumerate(ordered, 1):
+            rec['optimized_order'] = idx
+        
+        print(f"   路徑優化: {len(ordered)} 個POI")
+        print(f"   初始距離: {initial_distance:.2f}km → 2-opt: {after_2opt_distance:.2f}km → Or-opt: {final_distance:.2f}km")
+        print(f"   總改善: {improvement:.1f}%")
+        print(f"   起點 → ", end="")
+        for rec in ordered:
+            print(f"{rec.get('poi', {}).get('name', '?')[:10]}... → ", end="")
+        print("終點")
+        
+        return ordered
+    
+    def _greedy_nearest_neighbor(
+        self,
+        recommendations: List[Dict],
+        start_location: Tuple[float, float],
+        end_location: Tuple[float, float]
+    ) -> List[Dict]:
+        """貪婪最近鄰算法獲得初始解"""
         unvisited = list(recommendations)
         ordered = []
         current_location = start_location
@@ -1184,7 +1221,7 @@ class RouteAwareRecommender:
                 distances.append((dist, rec))
             
             distances.sort(key=lambda x: x[0])
-            nearest_dist, nearest_rec = distances[0]
+            nearest_rec = distances[0][1]
             
             ordered.append(nearest_rec)
             unvisited.remove(nearest_rec)
@@ -1192,57 +1229,26 @@ class RouteAwareRecommender:
             poi = nearest_rec.get('poi', {})
             current_location = (poi.get('latitude'), poi.get('longitude'))
         
-        # 計算初始路徑長度
-        initial_distance = self._calculate_route_distance(ordered, start_location, end_location)
-        
-        # 步驟2: 2-opt 優化（消除交叉路徑）
-        ordered = self._two_opt_optimization(ordered, start_location, end_location)
-        
-        # 計算優化後路徑長度
-        optimized_distance = self._calculate_route_distance(ordered, start_location, end_location)
-        improvement = ((initial_distance - optimized_distance) / initial_distance * 100) if initial_distance > 0 else 0
-        
-        # 更新order編號
-        for idx, rec in enumerate(ordered, 1):
-            rec['optimized_order'] = idx
-        
-        print(f"   路徑優化: {len(ordered)} 個POI")
-        print(f"   初始距離: {initial_distance:.2f}km → 優化後: {optimized_distance:.2f}km (改善 {improvement:.1f}%)")
-        print(f"   起點 → ", end="")
-        for rec in ordered:
-            print(f"{rec.get('poi', {}).get('name', '?')[:10]}... → ", end="")
-        print("終點")
-        
         return ordered
     
-    def _two_opt_optimization(
+    def _improved_two_opt(
         self,
         route: List[Dict],
         start_location: Tuple[float, float],
         end_location: Tuple[float, float],
-        max_iterations: int = 100
+        max_iterations: int = 200
     ) -> List[Dict]:
         """
-        2-opt 優化算法：消除路徑交叉
-        
-        原理：檢查每對邊，嘗試反轉中間部分，如果路徑變短則採用
-        例如：A-B-C-D-E 檢查是否 A-C-B-D-E 或 A-B-D-C-E 更短
-        
-        Args:
-            route: 當前路徑
-            start_location: 起點
-            end_location: 終點
-            max_iterations: 最大迭代次數
-        
-        Returns:
-            優化後的路徑
+        改進的 2-opt 算法：使用增量計算，避免重複計算整條路徑
         """
         if len(route) <= 2:
             return route
         
+        best_route = list(route)
+        best_distance = self._calculate_route_distance(best_route, start_location, end_location)
+        
         improved = True
         iteration = 0
-        best_route = list(route)
         
         while improved and iteration < max_iterations:
             improved = False
@@ -1250,17 +1256,119 @@ class RouteAwareRecommender:
             
             for i in range(len(best_route) - 1):
                 for j in range(i + 2, len(best_route)):
-                    # 嘗試反轉 [i+1, j] 區間
-                    new_route = best_route[:i+1] + best_route[i+1:j+1][::-1] + best_route[j+1:]
+                    # 計算反轉的增量成本
+                    delta = self._calculate_2opt_delta(
+                        best_route, i, j, start_location, end_location
+                    )
                     
-                    # 計算距離
-                    old_distance = self._calculate_route_distance(best_route, start_location, end_location)
-                    new_distance = self._calculate_route_distance(new_route, start_location, end_location)
-                    
-                    # 如果新路徑更短，採用
-                    if new_distance < old_distance:
-                        best_route = new_route
+                    # 如果增量為負（路徑變短），則反轉
+                    if delta < -0.001:  # 小閾值避免浮點誤差
+                        best_route = best_route[:i+1] + best_route[i+1:j+1][::-1] + best_route[j+1:]
+                        best_distance += delta
                         improved = True
+                        break
+                
+                if improved:
+                    break
+        
+        return best_route
+    
+    def _calculate_2opt_delta(
+        self,
+        route: List[Dict],
+        i: int,
+        j: int,
+        start_location: Tuple[float, float],
+        end_location: Tuple[float, float]
+    ) -> float:
+        """
+        計算 2-opt 反轉的增量成本（不需要計算整條路徑）
+        
+        反轉 [i+1, j]，只需計算被影響的邊：
+        - 移除: (i)→(i+1) 和 (j)→(j+1)
+        - 添加: (i)→(j) 和 (i+1)→(j+1)
+        """
+        # 獲取相關位置
+        def get_location(idx):
+            if idx < 0:
+                return start_location
+            elif idx >= len(route):
+                return end_location
+            else:
+                poi = route[idx].get('poi', {})
+                return (poi.get('latitude'), poi.get('longitude'))
+        
+        loc_i = get_location(i)
+        loc_i_plus_1 = get_location(i + 1)
+        loc_j = get_location(j)
+        loc_j_plus_1 = get_location(j + 1)
+        
+        # 原始邊的長度
+        old_dist = (
+            self._haversine_distance(loc_i[0], loc_i[1], loc_i_plus_1[0], loc_i_plus_1[1]) +
+            self._haversine_distance(loc_j[0], loc_j[1], loc_j_plus_1[0], loc_j_plus_1[1])
+        )
+        
+        # 新邊的長度
+        new_dist = (
+            self._haversine_distance(loc_i[0], loc_i[1], loc_j[0], loc_j[1]) +
+            self._haversine_distance(loc_i_plus_1[0], loc_i_plus_1[1], loc_j_plus_1[0], loc_j_plus_1[1])
+        )
+        
+        return new_dist - old_dist
+    
+    def _or_opt_optimization(
+        self,
+        route: List[Dict],
+        start_location: Tuple[float, float],
+        end_location: Tuple[float, float],
+        max_iterations: int = 50
+    ) -> List[Dict]:
+        """
+        Or-opt 優化：嘗試移動長度為 1, 2, 3 的連續子序列到其他位置
+        對於局部最優的 2-opt 解，Or-opt 可以進一步優化
+        """
+        if len(route) <= 3:
+            return route
+        
+        best_route = list(route)
+        
+        improved = True
+        iteration = 0
+        
+        while improved and iteration < max_iterations:
+            improved = False
+            iteration += 1
+            
+            # 嘗試不同長度的子序列 (1, 2, 3)
+            for length in [1, 2, 3]:
+                if length >= len(best_route):
+                    continue
+                
+                # 嘗試移動每個子序列
+                for i in range(len(best_route) - length + 1):
+                    # 提取子序列
+                    segment = best_route[i:i+length]
+                    remaining = best_route[:i] + best_route[i+length:]
+                    
+                    # 嘗試插入到其他位置
+                    for insert_pos in range(len(remaining) + 1):
+                        if insert_pos == i:  # 原位置跳過
+                            continue
+                        
+                        # 構建新路徑
+                        new_route = remaining[:insert_pos] + segment + remaining[insert_pos:]
+                        
+                        # 計算新路徑距離
+                        old_dist = self._calculate_route_distance(best_route, start_location, end_location)
+                        new_dist = self._calculate_route_distance(new_route, start_location, end_location)
+                        
+                        if new_dist < old_dist - 0.001:
+                            best_route = new_route
+                            improved = True
+                            break
+                    
+                    if improved:
                         break
                 
                 if improved:
