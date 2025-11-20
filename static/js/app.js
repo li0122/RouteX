@@ -350,25 +350,47 @@ function initItineraryMap(itinerary) {
         map = new LeafletResultMap('map');
     }
     
+    // 驗證並過濾有效的景點數據
+    const validStops = itinerary.stops.filter(stop => {
+        return stop && 
+               typeof stop.latitude === 'number' && 
+               typeof stop.longitude === 'number' &&
+               !isNaN(stop.latitude) && 
+               !isNaN(stop.longitude);
+    });
+    
+    if (validStops.length === 0) {
+        console.error('❌ 沒有有效的景點數據');
+        return;
+    }
+    
+    console.log('✅ 有效景點:', validStops.length, '/', itinerary.stops.length);
+    
     // 構建行程路線數據
     const routeData = {
         start_location: itinerary.route.start,
         end_location: itinerary.route.end,
-        recommendations: itinerary.stops.map((stop, idx) => ({
+        recommendations: validStops.map((stop, idx) => ({
             poi: {
-                name: stop.name,
+                name: stop.name || 'Unknown',
                 latitude: stop.latitude,
                 longitude: stop.longitude,
-                avg_rating: stop.rating,
-                num_reviews: stop.reviews,
-                primary_category: stop.category
+                avg_rating: stop.rating || 0,
+                num_reviews: stop.reviews || 0,
+                primary_category: stop.category || 'N/A'
             },
             score: 1.0 - (idx * 0.1),
-            extra_time_minutes: stop.duration
+            extra_time_minutes: stop.duration || 60
         }))
     };
     
-    map.setData(routeData);
+    console.log('📍 路線數據:', routeData);
+    
+    try {
+        map.setData(routeData);
+    } catch (error) {
+        console.error('❌ 地圖初始化錯誤:', error);
+    }
 }
 
 // 顯示行程卡片
@@ -379,22 +401,38 @@ function displayItineraryCard(itinerary) {
     const card = document.createElement('div');
     card.className = 'itinerary-card';
     
+    // 驗證數據
+    if (!itinerary || !itinerary.stops || itinerary.stops.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #9ca3af; padding: 40px;">無法生成行程</p>';
+        return;
+    }
+    
     // 構建行程卡片HTML
     let stopsHTML = '';
     itinerary.stops.forEach((stop, idx) => {
         const isLast = idx === itinerary.stops.length - 1;
+        
+        // 安全獲取數據
+        const name = stop.name || 'Unknown';
+        const rating = (stop.rating != null && !isNaN(stop.rating)) ? stop.rating.toFixed(1) : 'N/A';
+        const category = stop.category || 'N/A';
+        const duration = stop.duration || 60;
+        const reviews = stop.reviews || 0;
+        const reason = stop.reason || '';
+        const order = stop.order || (idx + 1);
+        
         stopsHTML += `
             <div class="stop-item">
-                <div class="stop-order">${stop.order}</div>
+                <div class="stop-order">${order}</div>
                 <div class="stop-content">
-                    <div class="stop-name">${stop.name}</div>
+                    <div class="stop-name">${name}</div>
                     <div class="stop-details">
-                        <span><i class="fas fa-star"></i> ${stop.rating.toFixed(1)}</span>
-                        <span><i class="fas fa-tag"></i> ${stop.category}</span>
-                        <span><i class="fas fa-clock"></i> ${stop.duration}分鐘</span>
-                        ${stop.reviews ? `<span><i class="fas fa-comment"></i> ${stop.reviews.toLocaleString()}</span>` : ''}
+                        <span><i class="fas fa-star"></i> ${rating}</span>
+                        <span><i class="fas fa-tag"></i> ${category}</span>
+                        <span><i class="fas fa-clock"></i> ${duration}分鐘</span>
+                        ${reviews > 0 ? `<span><i class="fas fa-comment"></i> ${reviews.toLocaleString()}</span>` : ''}
                     </div>
-                    <div class="stop-reason">${stop.reason}</div>
+                    ${reason ? `<div class="stop-reason">${reason}</div>` : ''}
                 </div>
             </div>
             ${!isLast ? '<div style="text-align: center; color: #9ca3af; margin: 8px 0;">↓</div>' : ''}

@@ -364,14 +364,22 @@ def recommend_itinerary_api():
         waypoints = []
         
         for item in result.get('itinerary', []):
-            poi = item['poi']
+            poi = item.get('poi', {})
+            
+            # 驗證必要的座標數據
+            latitude = poi.get('latitude')
+            longitude = poi.get('longitude')
+            
+            if latitude is None or longitude is None:
+                print(f"⚠️ 跳過無效POI: {poi.get('name', 'Unknown')} (缺少座標)")
+                continue
             
             stop = {
                 'order': item.get('order', 0),
                 'name': poi.get('name', 'Unknown'),
                 'category': poi.get('primary_category', poi.get('category', 'N/A')),
-                'latitude': poi.get('latitude'),
-                'longitude': poi.get('longitude'),
+                'latitude': latitude,
+                'longitude': longitude,
                 'rating': poi.get('avg_rating', 0),
                 'reviews': poi.get('num_reviews', 0),
                 'address': poi.get('address', ''),
@@ -381,7 +389,7 @@ def recommend_itinerary_api():
             }
             
             stops.append(stop)
-            waypoints.append([poi.get('latitude'), poi.get('longitude')])
+            waypoints.append([latitude, longitude])
         
         # 構建單一行程卡片響應
         itinerary_card = {
