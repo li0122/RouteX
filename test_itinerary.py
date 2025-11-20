@@ -27,21 +27,21 @@ def test_itinerary_api():
         "user_history": []
     }
     
-    print(f"\n📍 起點: {payload['start']}")
-    print(f"📍 終點: {payload['end']}")
-    print(f"🎯 需求: {payload['activity_intent']}")
+    print(f"\n 起點: {payload['start']}")
+    print(f" 終點: {payload['end']}")
+    print(f" 需求: {payload['activity_intent']}")
     print(f"⏱️ 時間: {payload['time_budget']} 分鐘")
     
     try:
-        print(f"\n🌐 發送請求到 {url}...")
+        print(f"\n 發送請求到 {url}...")
         response = requests.post(url, json=payload, timeout=120)
         
         if response.status_code == 200:
             result = response.json()
             
-            print(f"\n✅ 請求成功!")
+            print(f"\n 請求成功!")
             print(f"\n{'='*60}")
-            print(f"📋 行程摘要")
+            print(f" 行程摘要")
             print(f"{'='*60}")
             print(f"總景點數: {len(result.get('itinerary', []))}")
             print(f"預計總時間: {result.get('total_duration', 0)} 分鐘")
@@ -49,7 +49,7 @@ def test_itinerary_api():
             print(f"\n{result.get('summary', '無摘要')}")
             
             print(f"\n{'='*60}")
-            print(f"🗺️ 行程詳情")
+            print(f"️ 行程詳情")
             print(f"{'='*60}")
             
             for item in result.get('itinerary', []):
@@ -63,7 +63,7 @@ def test_itinerary_api():
             
             if result.get('tips'):
                 print(f"\n{'='*60}")
-                print(f"💡 旅遊建議")
+                print(f" 旅遊建議")
                 print(f"{'='*60}")
                 for tip in result['tips']:
                     print(f"  • {tip}")
@@ -71,17 +71,17 @@ def test_itinerary_api():
             # 保存結果
             with open('itinerary_result.json', 'w', encoding='utf-8') as f:
                 json.dump(result, f, indent=2, ensure_ascii=False)
-            print(f"\n💾 完整結果已保存到 itinerary_result.json")
+            print(f"\n 完整結果已保存到 itinerary_result.json")
             
         else:
-            print(f"\n❌ 請求失敗: {response.status_code}")
+            print(f"\n 請求失敗: {response.status_code}")
             print(f"錯誤訊息: {response.text}")
             
     except requests.exceptions.ConnectionError:
-        print(f"\n❌ 連接失敗: 請確認 Flask 服務器正在運行")
+        print(f"\n 連接失敗: 請確認 Flask 服務器正在運行")
         print(f"   啟動命令: python web_app.py")
     except Exception as e:
-        print(f"\n❌ 測試失敗: {e}")
+        print(f"\n 測試失敗: {e}")
         import traceback
         traceback.print_exc()
 
@@ -95,13 +95,13 @@ def test_itinerary_directly():
     try:
         from route_aware_recommender import create_route_aware_recommender
         
-        print("\n📦 初始化推薦器...")
+        print("\n 初始化推薦器...")
         recommender = create_route_aware_recommender(
             model_checkpoint="models/travel_dlrm.pth",
             device="cpu"
         )
         
-        print("\n🗺️ 開始行程推薦...")
+        print("\n️ 開始行程推薦...")
         result = recommender.recommend_itinerary(
             user_id="test_user",
             user_history=[],
@@ -112,9 +112,9 @@ def test_itinerary_directly():
             time_budget=240
         )
         
-        print(f"\n✅ 行程生成成功!")
+        print(f"\n 行程生成成功!")
         print(f"\n{'='*60}")
-        print(f"📋 行程摘要")
+        print(f" 行程摘要")
         print(f"{'='*60}")
         print(f"總景點數: {len(result.get('itinerary', []))}")
         print(f"預計總時間: {result.get('total_duration', 0)} 分鐘")
@@ -122,7 +122,7 @@ def test_itinerary_directly():
         print(f"\n{result.get('summary', '無摘要')}")
         
         print(f"\n{'='*60}")
-        print(f"🗺️ 行程詳情")
+        print(f"️ 行程詳情")
         print(f"{'='*60}")
         
         for item in result.get('itinerary', []):
@@ -135,13 +135,13 @@ def test_itinerary_directly():
         
         if result.get('tips'):
             print(f"\n{'='*60}")
-            print(f"💡 旅遊建議")
+            print(f" 旅遊建議")
             print(f"{'='*60}")
             for tip in result['tips']:
                 print(f"  • {tip}")
         
     except Exception as e:
-        print(f"\n❌ 測試失敗: {e}")
+        print(f"\n 測試失敗: {e}")
         import traceback
         traceback.print_exc()
 

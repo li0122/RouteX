@@ -172,23 +172,23 @@
 </head>
 <body>
     <div class="container">
-        <h1>🗺️ 離線地圖測試</h1>
+        <h1>️ 離線地圖測試</h1>
         <p class="subtitle">測試 Canvas 地圖選擇器功能</p>
 
         <div class="map-section">
             <div class="map-title">
-                📍 舊金山灣區地圖
+                 舊金山灣區地圖
             </div>
 
             <div class="button-group">
                 <button class="btn btn-start" id="setStartBtn">
-                    🟢 設定出發點
+                     設定出發點
                 </button>
                 <button class="btn btn-end" id="setEndBtn">
-                    🔴 設定目的地
+                     設定目的地
                 </button>
                 <button class="btn btn-reset" id="resetBtn">
-                    🔄 重置
+                     重置
                 </button>
             </div>
 
@@ -198,23 +198,23 @@
             <!-- 座標顯示 -->
             <div class="location-display">
                 <div class="location-item">
-                    <strong>🟢 出發點:</strong>
+                    <strong> 出發點:</strong>
                     <span id="startLocationDisplay">請在地圖上點擊選擇</span>
                 </div>
                 <div class="location-item">
-                    <strong>🔴 目的地:</strong>
+                    <strong> 目的地:</strong>
                     <span id="endLocationDisplay">請在地圖上點擊選擇</span>
                 </div>
             </div>
 
             <!-- 操作說明 -->
             <div class="instructions">
-                <strong>💡 操作提示：</strong>
+                <strong> 操作提示：</strong>
                 <p>
-                    🔍 <strong>滾輪縮放</strong> - 使用滑鼠滾輪放大或縮小地圖<br>
-                    ✋ <strong>拖動平移</strong> - 按住滑鼠拖動來移動地圖<br>
-                    🖱️ <strong>點擊選擇</strong> - 點擊按鈕後在地圖上點擊選擇位置<br>
-                    📍 <strong>快速地標</strong> - 可以直接點擊預設的地標圖標
+                     <strong>滾輪縮放</strong> - 使用滑鼠滾輪放大或縮小地圖<br>
+                     <strong>拖動平移</strong> - 按住滑鼠拖動來移動地圖<br>
+                    ️ <strong>點擊選擇</strong> - 點擊按鈕後在地圖上點擊選擇位置<br>
+                     <strong>快速地標</strong> - 可以直接點擊預設的地標圖標
                 </p>
             </div>
 
@@ -256,14 +256,14 @@
                     document.getElementById('startLocationDisplay').textContent = 
                         `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
                     document.getElementById('setStartBtn').style.opacity = '0.7';
-                    showStatus('✅ 出發點已設定！', 'success');
+                    showStatus(' 出發點已設定！', 'success');
                 },
                 onEndSelect: (lat, lng) => {
                     endLocation = [lat, lng];
                     document.getElementById('endLocationDisplay').textContent = 
                         `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
                     document.getElementById('setEndBtn').style.opacity = '0.7';
-                    showStatus('✅ 目的地已設定！', 'success');
+                    showStatus(' 目的地已設定！', 'success');
                 }
             });
         }
@@ -273,7 +273,7 @@
             offlineMapPicker.setSelectingStart(true);
             this.style.opacity = '1';
             document.getElementById('setEndBtn').style.opacity = '0.7';
-            showStatus('📍 請在地圖上點擊選擇出發點', 'info');
+            showStatus(' 請在地圖上點擊選擇出發點', 'info');
         });
 
         // 設定目的地按鈕
@@ -281,7 +281,7 @@
             offlineMapPicker.setSelectingEnd(true);
             this.style.opacity = '1';
             document.getElementById('setStartBtn').style.opacity = '0.7';
-            showStatus('📍 請在地圖上點擊選擇目的地', 'info');
+            showStatus(' 請在地圖上點擊選擇目的地', 'info');
         });
 
         // 重置按鈕
@@ -293,13 +293,13 @@
             document.getElementById('endLocationDisplay').textContent = '請在地圖上點擊選擇';
             document.getElementById('setStartBtn').style.opacity = '1';
             document.getElementById('setEndBtn').style.opacity = '1';
-            showStatus('🔄 地圖已重置', 'info');
+            showStatus(' 地圖已重置', 'info');
         });
 
         // 頁面載入後初始化
         window.addEventListener('load', () => {
             initMap();
-            showStatus('🗺️ 地圖已載入，請開始選擇位置', 'success');
+            showStatus('️ 地圖已載入，請開始選擇位置', 'success');
         });
     </script>
 </body>

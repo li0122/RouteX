@@ -18,11 +18,11 @@ def example_1_basic_usage():
     """範例1: 基本使用（不使用LLM過濾）"""
     
     print("=" * 60)
-    print("📚 範例1: 基本推薦系統使用")
+    print(" 範例1: 基本推薦系統使用")
     print("=" * 60)
     
     # 步驟1: 初始化推薦器
-    print("\n🔧 步驟1: 初始化推薦器")
+    print("\n 步驟1: 初始化推薦器")
     
     osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
     
@@ -36,10 +36,10 @@ def example_1_basic_usage():
     recommender.osrm_client = osrm_client
     recommender.enable_llm_filter = False
     
-    print("✅ 推薦器初始化完成")
+    print(" 推薦器初始化完成")
     
     # 步驟2: 設定用戶資訊和目標位置
-    print("\n📍 步驟2: 設定推薦參數")
+    print("\n 步驟2: 設定推薦參數")
     user_id = 1
     current_lat = 37.7749  # 舊金山
     current_lon = -122.4194
@@ -53,7 +53,7 @@ def example_1_basic_usage():
     print(f"   需要推薦數: {top_k}")
     
     # 步驟3: 獲取推薦
-    print(f"\n🎯 步驟3: 生成推薦")
+    print(f"\n 步驟3: 生成推薦")
     recommendations = recommender.recommend_on_route(
         user_id=str(user_id),
         user_history=[],
@@ -63,7 +63,7 @@ def example_1_basic_usage():
     )
     
     # 步驟4: 顯示結果
-    print(f"\n📊 步驟4: 推薦結果")
+    print(f"\n 步驟4: 推薦結果")
     print_recommendations(recommendations)
     
     return recommendations
@@ -73,11 +73,11 @@ def example_2_with_llm_filter():
     """範例2: 使用LLM過濾的推薦"""
     
     print("\n\n" + "=" * 60)
-    print("🤖 範例2: 使用LLM過濾的推薦系統")
+    print(" 範例2: 使用LLM過濾的推薦系統")
     print("=" * 60)
     
     # 步驟1: 初始化推薦器（啟用LLM）
-    print("\n🔧 步驟1: 初始化推薦器（啟用LLM過濾）")
+    print("\n 步驟1: 初始化推薦器（啟用LLM過濾）")
     
     osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
     
@@ -95,16 +95,16 @@ def example_2_with_llm_filter():
     if LLM_FILTER_AVAILABLE:
         try:
             recommender.llm_filter = SimpleLLMFilter()
-            print(f"✅ LLM過濾器已啟用")
+            print(f" LLM過濾器已啟用")
         except Exception as e:
-            print(f"⚠️ LLM啟用失敗: {e}")
+            print(f"️ LLM啟用失敗: {e}")
             recommender.enable_llm_filter = False
     
-    print("✅ 推薦器初始化完成")
+    print(" 推薦器初始化完成")
     print(f"   LLM端點: {recommender.llm_filter.base_url if recommender.llm_filter else '未設置'}")
     
     # 步驟2: 設定推薦參數
-    print("\n📍 步驟2: 設定推薦參數")
+    print("\n 步驟2: 設定推薦參數")
     user_id = 2
     current_lat = 37.7749
     current_lon = -122.4194
@@ -114,10 +114,10 @@ def example_2_with_llm_filter():
     
     print(f"   用戶ID: {user_id}")
     print(f"   需要推薦數: {top_k}")
-    print(f"   💡 系統會用LLM過濾掉不適合旅客的POI")
+    print(f"    系統會用LLM過濾掉不適合旅客的POI")
     
     # 步驟3: 獲取推薦（會自動使用LLM過濾）
-    print(f"\n🎯 步驟3: 生成推薦（含LLM審核）")
+    print(f"\n 步驟3: 生成推薦（含LLM審核）")
     recommendations = recommender.recommend_on_route(
         user_id=str(user_id),
         user_history=[],
@@ -127,7 +127,7 @@ def example_2_with_llm_filter():
     )
     
     # 步驟4: 顯示結果
-    print(f"\n📊 步驟4: LLM過濾後的推薦結果")
+    print(f"\n 步驟4: LLM過濾後的推薦結果")
     print_recommendations(recommendations)
     
     return recommendations
@@ -137,11 +137,11 @@ def example_3_batch_recommendations():
     """範例3: 批量推薦（多個用戶）"""
     
     print("\n\n" + "=" * 60)
-    print("👥 範例3: 批量推薦多個用戶")
+    print(" 範例3: 批量推薦多個用戶")
     print("=" * 60)
     
     # 初始化推薦器
-    print("\n🔧 初始化推薦器")
+    print("\n 初始化推薦器")
     
     osrm_client = OSRMClient(server_url="http://router.project-osrm.org")
     
@@ -184,7 +184,7 @@ def example_3_batch_recommendations():
     ]
     
     # 批量處理
-    print(f"\n🎯 批量處理 {len(user_requests)} 個推薦請求")
+    print(f"\n 批量處理 {len(user_requests)} 個推薦請求")
     all_recommendations = {}
     
     for i, request in enumerate(user_requests, 1):
@@ -200,10 +200,10 @@ def example_3_batch_recommendations():
         )
         
         all_recommendations[request['name']] = recommendations
-        print(f"✅ 完成，獲得 {len(recommendations)} 個推薦")
+        print(f" 完成，獲得 {len(recommendations)} 個推薦")
     
     # 顯示所有結果
-    print(f"\n\n📊 批量推薦總結")
+    print(f"\n\n 批量推薦總結")
     print("=" * 60)
     for name, recs in all_recommendations.items():
         print(f"\n{name}:")
@@ -218,7 +218,7 @@ def example_4_custom_user_profile():
     """範例4: 使用自定義用戶偏好"""
     
     print("\n\n" + "=" * 60)
-    print("👤 範例4: 自定義用戶偏好推薦")
+    print(" 範例4: 自定義用戶偏好推薦")
     print("=" * 60)
     
     # 初始化
@@ -242,13 +242,13 @@ def example_4_custom_user_profile():
         'prefer_popular': True
     }
     
-    print("\n👤 用戶偏好設定:")
+    print("\n 用戶偏好設定:")
     print(f"   偏好類別: {', '.join(user_profile['preferred_categories'])}")
     print(f"   最低評分: {user_profile['min_rating']}⭐")
     print(f"   最大繞道時間: {user_profile['max_detour_minutes']}分鐘")
     
     # 獲取推薦
-    print("\n🎯 根據偏好生成推薦")
+    print("\n 根據偏好生成推薦")
     
     # 注意：user_profile 需要透過 user_history 來建立
     # 這裡我們使用空歷史，實際應用中應該提供真實歷史記錄
@@ -261,7 +261,7 @@ def example_4_custom_user_profile():
     )
     
     # 顯示結果
-    print(f"\n📊 個性化推薦結果")
+    print(f"\n 個性化推薦結果")
     print_recommendations(recommendations)
     
     return recommendations
@@ -271,7 +271,7 @@ def example_5_export_results():
     """範例5: 導出推薦結果到JSON"""
     
     print("\n\n" + "=" * 60)
-    print("💾 範例5: 導出推薦結果")
+    print(" 範例5: 導出推薦結果")
     print("=" * 60)
     
     # 獲取推薦
@@ -331,11 +331,11 @@ def example_5_export_results():
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(export_data, f, indent=2, ensure_ascii=False)
     
-    print(f"✅ 推薦結果已導出到: {output_file}")
+    print(f" 推薦結果已導出到: {output_file}")
     print(f"   包含 {len(recommendations)} 個推薦")
     
     # 顯示預覽
-    print(f"\n📄 文件預覽:")
+    print(f"\n 文件預覽:")
     print(json.dumps(export_data, indent=2, ensure_ascii=False)[:500] + "...")
     
     return export_data
@@ -344,10 +344,10 @@ def example_5_export_results():
 def print_recommendations(recommendations):
     """格式化顯示推薦結果"""
     if not recommendations:
-        print("   ⚠️ 沒有推薦結果")
+        print("   ️ 沒有推薦結果")
         return
     
-    print(f"\n✅ 獲得 {len(recommendations)} 個推薦:")
+    print(f"\n 獲得 {len(recommendations)} 個推薦:")
     print("─" * 60)
     
     for i, rec in enumerate(recommendations, 1):
@@ -356,7 +356,7 @@ def print_recommendations(recommendations):
         extra_time = rec['extra_time_minutes']
         llm_approved = rec.get('llm_approved', False)
         
-        print(f"\n🎯 推薦 #{i}")
+        print(f"\n 推薦 #{i}")
         print(f"   名稱: {poi['name']}")
         print(f"   類別: {poi.get('primary_category', '未分類')}")
         print(f"   評分: {poi.get('avg_rating', 0):.1f}⭐ ({poi.get('num_reviews', 0)} 評論)")
@@ -365,7 +365,7 @@ def print_recommendations(recommendations):
         print(f"   額外時間: {extra_time:.1f} 分鐘")
         
         if llm_approved:
-            print(f"   ✅ LLM審核: 通過（適合旅客）")
+            print(f"    LLM審核: 通過（適合旅客）")
         
         # 顯示推薦理由
         if 'reasons' in rec and rec['reasons']:
@@ -377,9 +377,9 @@ def print_recommendations(recommendations):
 def main():
     """主函數 - 執行所有範例"""
     
-    print("🎮 RouteX 旅遊推薦系統 - 完整使用範例")
-    print("🔗 LLM端點: 140.125.248.15:31008")
-    print("🤖 模型: nvidia/llama-3.3-nemotron-super-49b-v1")
+    print(" RouteX 旅遊推薦系統 - 完整使用範例")
+    print(" LLM端點: 140.125.248.15:31008")
+    print(" 模型: nvidia/llama-3.3-nemotron-super-49b-v1")
     print()
     
     try:
@@ -407,13 +407,13 @@ def main():
         example_5_export_results()
         
         print("\n\n" + "=" * 60)
-        print("✅ 所有範例執行完成!")
+        print(" 所有範例執行完成!")
         print("=" * 60)
         
     except KeyboardInterrupt:
-        print("\n\n⚠️ 用戶中斷執行")
+        print("\n\n️ 用戶中斷執行")
     except Exception as e:
-        print(f"\n\n❌ 執行錯誤: {e}")
+        print(f"\n\n 執行錯誤: {e}")
         import traceback
         traceback.print_exc()
 

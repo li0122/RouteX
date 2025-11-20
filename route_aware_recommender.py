@@ -20,14 +20,14 @@ try:
     ASYNC_SUPPORTED = True
 except ImportError:
     ASYNC_SUPPORTED = False
-    print("⚠️ aiohttp未安裝，將使用同步模式")
+    print("️ aiohttp未安裝，將使用同步模式")
 
 try:
     from scipy.spatial import cKDTree
     SPATIAL_INDEX_SUPPORTED = True
 except ImportError:
     SPATIAL_INDEX_SUPPORTED = False
-    print("⚠️ scipy未安裝，將使用線性搜索")
+    print("️ scipy未安裝，將使用線性搜索")
 
 from dlrm_model import TravelDLRM, create_travel_dlrm
 from data_processor import POIDataProcessor
@@ -37,7 +37,7 @@ try:
     LLM_FILTER_AVAILABLE = True
 except ImportError:
     LLM_FILTER_AVAILABLE = False
-    print("⚠️ LLM過濾器不可用，將跳過LLM審核")
+    print("️ LLM過濾器不可用，將跳過LLM審核")
 
 
 class OSRMClient:
@@ -142,7 +142,7 @@ class OSRMClient:
                 # 網路問題，使用距離估算作為降級
                 pass
             else:
-                print(f"⚠️ OSRM 請求異常: {type(e).__name__}")
+                print(f"️ OSRM 請求異常: {type(e).__name__}")
             return None
     
     def calculate_detour(
@@ -287,7 +287,7 @@ class SpatialIndex:
     def _build_index(self):
         """構建空間索引"""
         if not SPATIAL_INDEX_SUPPORTED:
-            print("⚠️ 空間索引不可用，使用線性搜索")
+            print("️ 空間索引不可用，使用線性搜索")
             return
         
         try:
@@ -306,7 +306,7 @@ class SpatialIndex:
                     self.poi_mapping[len(coordinates) - 1] = poi
             
             if len(coordinates) < 2:
-                print("⚠️ 有效POI太少，無法構建空間索引")
+                print("️ 有效POI太少，無法構建空間索引")
                 return
             
             # 構建 KD 樹
@@ -314,7 +314,7 @@ class SpatialIndex:
             self.kdtree = cKDTree(self.coordinates)
             self.index_built = True
             
-            print(f"✓ 空間索引構建完成: {len(coordinates):,} 個有效POI")
+            print(f" 空間索引構建完成: {len(coordinates):,} 個有效POI")
             
         except Exception as e:
             print(f"空間索引構建失敗: {e}")
@@ -369,7 +369,7 @@ class SpatialIndex:
             # 返回結果
             results = [poi for poi, _ in candidates[:max_results]]
             
-            print(f"📍 空間索引查詢: {len(results)}/{len(candidates)} POI 在 {radius_km}km 內")
+            print(f" 空間索引查詢: {len(results)}/{len(candidates)} POI 在 {radius_km}km 內")
             return results
             
         except Exception as e:
@@ -609,7 +609,7 @@ class UserPreferenceModel:
         self.user_profiles[user_id] = profile
         
         # 輸出用戶畫像摘要
-        print(f"📊 用戶畫像建立完成:")
+        print(f" 用戶畫像建立完成:")
         print(f"   偏好類別: {preferred_categories[:3]}")
         print(f"   評分習慣: {avg_rating:.1f}⭐ ({rating_generosity})")
         print(f"   價格偏好: {avg_price_level:.1f}級 ({price_sensitivity}敏感度)")
@@ -699,7 +699,7 @@ class RouteAwareRecommender:
         
         # 初始化空間索引
         if enable_spatial_index:
-            print("📋 正在構建空間索引...")
+            print(" 正在構建空間索引...")
             
             # 檢查poi_processor.pois的類型並正確處理
             if hasattr(self.poi_processor, 'pois'):
@@ -710,10 +710,10 @@ class RouteAwareRecommender:
                     # 如果是列表，直接使用
                     all_pois = self.poi_processor.pois
                 else:
-                    print(f"⚠️ 未知的pois數據類型: {type(self.poi_processor.pois)}")
+                    print(f"️ 未知的pois數據類型: {type(self.poi_processor.pois)}")
                     all_pois = []
             else:
-                print("⚠️ poi_processor沒有pois屬性")
+                print("️ poi_processor沒有pois屬性")
                 all_pois = []
             
             print(f"   找到 {len(all_pois)} 個POI用於空間索引")
@@ -721,7 +721,7 @@ class RouteAwareRecommender:
             if all_pois:
                 self.spatial_index = SpatialIndex(all_pois)
             else:
-                print("⚠️ 沒有POI數據，禁用空間索引")
+                print("️ 沒有POI數據，禁用空間索引")
                 self.spatial_index = None
         else:
             self.spatial_index = None
@@ -738,9 +738,9 @@ class RouteAwareRecommender:
         if LLM_FILTER_AVAILABLE:
             try:
                 self.llm_filter = SimpleLLMFilter()
-                print(f"✅ LLM服務初始化成功（用於類別篩選和行程生成）")
+                print(f" LLM服務初始化成功（用於類別篩選和行程生成）")
             except Exception as e:
-                print(f"⚠️ LLM服務初始化失敗: {e}")
+                print(f"️ LLM服務初始化失敗: {e}")
                 self.llm_filter = None
         else:
             self.llm_filter = None
@@ -748,7 +748,7 @@ class RouteAwareRecommender:
         self.model.to(self.device)
         self.model.eval()
         
-        print(f"✅ 優化版推薦器初始化完成")
+        print(f" 優化版推薦器初始化完成")
         enabled_text = "啟用" if self.spatial_index and self.spatial_index.index_built else "禁用"
         print(f"   - 空間索引: {enabled_text}")
         async_text = "啟用" if self.enable_async else "禁用"
@@ -793,10 +793,10 @@ class RouteAwareRecommender:
         start_time = time.time()
         self.performance_stats['total_recommendations'] += 1
         
-        print(f"🎯 開始路線推薦: {start_location} → {end_location}")
+        print(f" 開始路線推薦: {start_location} → {end_location}")
         
         # 1. 建立用戶畫像
-        print("👤 步驟1: 建立用戶畫像...")
+        print(" 步驟1: 建立用戶畫像...")
         user_profile = self.user_preference_model.build_user_profile(
             user_id, user_history
         )
@@ -810,20 +810,20 @@ class RouteAwareRecommender:
                 elif isinstance(self.poi_processor.pois, list):
                     candidate_pois = self.poi_processor.pois
                 else:
-                    print(f"⚠️ 未知的pois數據類型: {type(self.poi_processor.pois)}")
+                    print(f"️ 未知的pois數據類型: {type(self.poi_processor.pois)}")
                     candidate_pois = []
             else:
-                print("⚠️ poi_processor沒有pois屬性")
+                print("️ poi_processor沒有pois屬性")
                 candidate_pois = []
         
-        print(f"📊 使用全部 {len(candidate_pois)} 個POI進行篩選（未進行空間和預過濾）")
+        print(f" 使用全部 {len(candidate_pois)} 個POI進行篩選（未進行空間和預過濾）")
         
         if not candidate_pois:
-            print("⚠️ 沒有找到候選POI")
+            print("️ 沒有找到候選POI")
             return []
         
         # 2.5. 地理邊界框過濾（在路線過濾前）
-        print("📦 步驟2.5: 地理邊界框過濾...")
+        print(" 步驟2.5: 地理邊界框過濾...")
         bbox_start = time.time()
         
         filtered_pois = self._filter_by_bounding_box(
@@ -839,7 +839,7 @@ class RouteAwareRecommender:
         print(f"   耗時: {bbox_time:.3f}s")
         
         if not filtered_pois:
-            print("⚠️ 地理邊界框內沒有POI，嘗試放寬範圍...")
+            print("️ 地理邊界框內沒有POI，嘗試放寬範圍...")
             # 如果過濾後沒有POI，放寬邊界框
             filtered_pois = self._filter_by_bounding_box(
                 candidate_pois, start_location, end_location, padding_ratio=0.5
@@ -847,7 +847,7 @@ class RouteAwareRecommender:
             print(f"   放寬後POI: {len(filtered_pois)} 個")
             
             if not filtered_pois:
-                print("⚠️ 即使放寬邊界框仍沒有POI")
+                print("️ 即使放寬邊界框仍沒有POI")
                 return []
         
         # 3. LLM類別篩選（取代OSRM路線過濾）
@@ -871,7 +871,7 @@ class RouteAwareRecommender:
         print(f"   耗時: {llm_time:.3f}s")
         
         if not selected_categories:
-            print("⚠️ 沒有符合的類別")
+            print("️ 沒有符合的類別")
             return []
         
         # 4. 根據篩選的類別更新POI列表
@@ -884,11 +884,11 @@ class RouteAwareRecommender:
         print(f"   類別過濾後: {len(category_filtered_pois)} 個POI")
         
         if not category_filtered_pois:
-            print("⚠️ 沒有POI匹配篩選的類別")
+            print("️ 沒有POI匹配篩選的類別")
             return []
         
         # 5. 模型評分
-        print("🧠 步驟4: 模型評分...")
+        print(" 步驟4: 模型評分...")
         inference_start = time.time()
         
         scores = self._score_pois(
@@ -899,7 +899,7 @@ class RouteAwareRecommender:
         print(f"   模型評分完成 (耗時: {inference_time:.3f}s)")
         
         # 6. 計算 OSRM 繞道信息（針對所有評分後的 POI）
-        print("🚗 步驟5: 計算繞道信息...")
+        print(" 步驟5: 計算繞道信息...")
         osrm_start = time.time()
         
         # 提取 POI 位置
@@ -973,9 +973,9 @@ class RouteAwareRecommender:
         if osrm_time > 0:
             print(f"   平均速度: {len(detours)/osrm_time:.1f} POI/秒 (並發模式)")
         if failed_count > 0:
-            print(f"   ⚠️ {failed_count} 個使用地理估算 (OSRM暫時不可用)")
+            print(f"   ️ {failed_count} 個使用地理估算 (OSRM暫時不可用)")
         if estimated_detours:
-            print(f"   📏 {len(estimated_detours)} 個使用估算值")
+            print(f"    {len(estimated_detours)} 個使用估算值")
         
         # 7. 生成推薦結果
         recommendations = self._generate_recommendations(
@@ -987,7 +987,7 @@ class RouteAwareRecommender:
         total_time = time.time() - start_time
         self._update_performance_stats(total_time)
         
-        print(f"\n✅ 推薦完成! 總耗時: {total_time:.3f}s")
+        print(f"\n 推薦完成! 總耗時: {total_time:.3f}s")
         print(f"   最終推薦: {len(recommendations)} 個")
         
         return recommendations
@@ -1031,13 +1031,13 @@ class RouteAwareRecommender:
         """
         start_time = time.time()
         
-        print(f"🗺️ 開始行程推薦: {start_location} → {end_location}")
+        print(f"️ 開始行程推薦: {start_location} → {end_location}")
         print(f"   活動需求: {activityIntent}")
         if time_budget:
             print(f"   時間預算: {time_budget} 分鐘")
         
         # 步驟 1: 使用 DLRM 獲取 Top-K 推薦
-        print(f"\n📊 步驟1: DLRM 排序 Top-{top_k} 候選...")
+        print(f"\n 步驟1: DLRM 排序 Top-{top_k} 候選...")
         recommendations = self.recommend_on_route(
             user_id=user_id,
             user_history=user_history,
@@ -1049,7 +1049,7 @@ class RouteAwareRecommender:
         )
         
         if not recommendations:
-            print("❌ 沒有推薦結果")
+            print(" 沒有推薦結果")
             return {
                 'itinerary': [],
                 'total_duration': 0,
@@ -1058,23 +1058,23 @@ class RouteAwareRecommender:
                 'tips': []
             }
         
-        print(f"✓ 獲得 {len(recommendations)} 個候選景點")
+        print(f" 獲得 {len(recommendations)} 個候選景點")
         
         # 步驟 2: 基於繞道成本進行 reranking
-        print(f"\n🔄 步驟2: 基於繞道成本 Reranking...")
+        print(f"\n 步驟2: 基於繞道成本 Reranking...")
         reranked = self._rerank_by_detour_cost(recommendations)
-        print(f"✓ Reranking 完成")
+        print(f" Reranking 完成")
         
         # 步驟 2.5: 優化訪問順序（最短路徑）
-        print(f"\n🗺️ 步驟2.5: 優化訪問順序...")
+        print(f"\n️ 步驟2.5: 優化訪問順序...")
         optimized = self._optimize_visit_order(reranked[:15], start_location, end_location)
-        print(f"✓ 路徑優化完成")
+        print(f" 路徑優化完成")
         
         # 步驟 3: 使用 LLM 組合成行程
-        print(f"\n🤖 步驟3: LLM 組合旅遊行程...")
+        print(f"\n 步驟3: LLM 組合旅遊行程...")
         
         if not self.llm_filter:
-            print("⚠️ LLM 不可用，使用備用行程生成")
+            print("️ LLM 不可用，使用備用行程生成")
             itinerary_result = self._fallback_itinerary_generation(optimized[:10])
         else:
             itinerary_result = self.llm_filter.generate_itinerary(
@@ -1092,7 +1092,7 @@ class RouteAwareRecommender:
         
         total_time = time.time() - start_time
         
-        print(f"\n✅ 行程推薦完成! 總耗時: {total_time:.3f}s")
+        print(f"\n 行程推薦完成! 總耗時: {total_time:.3f}s")
         print(f"   行程景點數: {len(itinerary_result.get('itinerary', []))}")
         print(f"   預計總時間: {itinerary_result.get('total_duration', 0)} 分鐘")
         
@@ -1479,7 +1479,7 @@ class RouteAwareRecommender:
             符合需求的類別列表
         """
         if not self.llm_filter:
-            print("⚠️ LLM服務不可用，返回所有類別")
+            print("️ LLM服務不可用，返回所有類別")
             return all_categories
         
         # 構建prompt
@@ -1513,7 +1513,7 @@ Do NOT include explanations, just return the comma-separated category list."""
             response = self.llm_filter._call_llm(prompt)
             
             if not response:
-                print("⚠️ LLM調用失敗，返回所有類別")
+                print("️ LLM調用失敗，返回所有類別")
                 return all_categories
             
             # 解析LLM輸出
@@ -1523,13 +1523,13 @@ Do NOT include explanations, just return the comma-separated category list."""
             valid_categories = [cat for cat in selected_categories if cat in all_categories]
             
             if not valid_categories:
-                print("⚠️ LLM返回的類別無效，使用所有類別")
+                print("️ LLM返回的類別無效，使用所有類別")
                 return all_categories
             
             return valid_categories
             
         except Exception as e:
-            print(f"⚠️ LLM類別篩選失敗: {e}")
+            print(f"️ LLM類別篩選失敗: {e}")
             return all_categories
     
     def _filter_by_bounding_box(
@@ -1796,7 +1796,7 @@ Do NOT include explanations, just return the comma-separated category list."""
     ) -> List[Dict]:
         """異步路線推薦流程（注意：OSRM 使用同步以避免封鎖）"""
         
-        print("🚀 步驟4: 路線過濾...")
+        print(" 步驟4: 路線過濾...")
         osrm_start = time.time()
         
         # 提取POI位置
@@ -1824,11 +1824,11 @@ Do NOT include explanations, just return the comma-separated category list."""
         print(f"   路線過濾完成: {len(valid_pois)} 個有效POI (耗時: {osrm_time:.3f}s)")
         
         if not valid_pois:
-            print("⚠️ 沒有POI滿足路線約束")
+            print("️ 沒有POI滿足路線約束")
             return []
         
         # 模型評分
-        print("🧠 步驟5: 模型評分...")
+        print(" 步驟5: 模型評分...")
         inference_start = time.time()
         
         scores = self._score_pois(
@@ -1848,7 +1848,7 @@ Do NOT include explanations, just return the comma-separated category list."""
         total_time = time.time() - start_time
         self._update_performance_stats(total_time)
         
-        print(f"\n✅ 推薦完成! 總耗時: {total_time:.3f}s")
+        print(f"\n 推薦完成! 總耗時: {total_time:.3f}s")
         print(f"   最終推薦: {len(recommendations)} 個")
         
         return recommendations
@@ -1867,7 +1867,7 @@ Do NOT include explanations, just return the comma-separated category list."""
     ) -> List[Dict]:
         """同步路線推薦流程 (回退模式) - 優化版"""
         
-        print(f"🐢 步驟4: 同步路線過濾 (快速模式)...")
+        print(f" 步驟4: 同步路線過濾 (快速模式)...")
         osrm_start = time.time()
         
         valid_pois = []
@@ -1879,7 +1879,7 @@ Do NOT include explanations, just return the comma-separated category list."""
         direct_route = self.osrm_client.get_route(start_location, end_location)
         
         if not direct_route:
-            print(f"   ⚠️ 直達路線查詢失敗，使用降級策略")
+            print(f"   ️ 直達路線查詢失敗，使用降級策略")
             # 降級策略: 使用距離估算
             return self._fallback_distance_based_recommendation(
                 user_profile, filtered_pois, start_location, end_location, top_k
@@ -1927,17 +1927,17 @@ Do NOT include explanations, just return the comma-separated category list."""
         print(f"   路線過濾完成: {len(valid_pois)} 個有效POI (耗時: {osrm_time:.3f}s)")
         
         if failed_requests > 0:
-            print(f"   ⚠️ 失敗查詢: {failed_requests} 個")
+            print(f"   ️ 失敗查詢: {failed_requests} 個")
         
         if not valid_pois:
-            print(f"   ⚠️ 沒有POI通過路線篩選，使用備用策略")
+            print(f"   ️ 沒有POI通過路線篩選，使用備用策略")
             # 備用策略: 按距離推薦
             return self._fallback_distance_based_recommendation(
                 user_profile, filtered_pois, start_location, end_location, top_k
             )
         
         # 模型評分
-        print(f"🧠 步驟5: 模型評分...")
+        print(f" 步驟5: 模型評分...")
         scores = self._score_pois(
             user_profile, valid_pois, start_location, end_location
         )
@@ -1952,7 +1952,7 @@ Do NOT include explanations, just return the comma-separated category list."""
         total_time = time.time() - start_time
         self._update_performance_stats(total_time)
         
-        print(f"\n✅ 推薦完成! 總耗時: {total_time:.3f}s")
+        print(f"\n 推薦完成! 總耗時: {total_time:.3f}s")
         return recommendations
     
     def _fallback_distance_based_recommendation(
@@ -2322,7 +2322,7 @@ Do NOT include explanations, just return the comma-separated category list."""
             special_features.append("寵物友善")
         
         if special_features:
-            reasons.append(f"✨ {special_features[0]}")
+            reasons.append(f" {special_features[0]}")
         
         # 6. 熱門度與趨勢
         if num_reviews > 500:
@@ -2387,10 +2387,10 @@ def create_route_recommender(
         poi_processor.load_data(max_records=1000000)
         poi_processor.preprocess()
         
-        print(f"✓ POI數據載入成功")
+        print(f" POI數據載入成功")
         
     except Exception as e:
-        print(f"❌ POI數據載入失敗: {e}")
+        print(f" POI數據載入失敗: {e}")
         print(f"嘗試使用模擬數據...")
         
         # 創建模擬 POI 處理器
@@ -2436,10 +2436,10 @@ def create_route_recommender(
             embedding_dim=64
         )
         
-        print(f"✓ 模型創建成功")
+        print(f" 模型創建成功")
         
     except Exception as e:
-        print(f"❌ 模型創建失敗: {e}")
+        print(f" 模型創建失敗: {e}")
         # 創建模擬模型
         class MockModel:
             def to(self, device): return self
@@ -2459,18 +2459,18 @@ def create_route_recommender(
             if hasattr(model, 'load_state_dict'):
                 try:
                     model.load_state_dict(checkpoint['model_state_dict'])
-                    print(f"✓ 模型權重載入成功")
+                    print(f" 模型權重載入成功")
                 except RuntimeError as e:
                     if "size mismatch" in str(e):
-                        print(f"⚠️ 模型結構不匹配: {e}")
+                        print(f"️ 模型結構不匹配: {e}")
                         print(f"使用預設模型參數")
                     else:
                         raise e
             else:
-                print(f"⚠️ 模擬模型不支援權重載入")
+                print(f"️ 模擬模型不支援權重載入")
                 
         except Exception as e:
-            print(f"❌ 模型權重載入失敗: {e}")
+            print(f" 模型權重載入失敗: {e}")
             print(f"使用預設模型參數")
     
     # 創建OSRM客戶端
@@ -2487,11 +2487,11 @@ def create_route_recommender(
             enable_async=enable_async
         )
         
-        print(f"✅ 路徑感知推薦器初始化完成!")
+        print(f" 路徑感知推薦器初始化完成!")
         return recommender
         
     except Exception as e:
-        print(f"❌ 推薦器初始化失敗: {e}")
+        print(f" 推薦器初始化失敗: {e}")
         import traceback
         traceback.print_exc()
         raise e
@@ -2523,4 +2523,4 @@ if __name__ == "__main__":
     print(f"  額外距離: {detour['extra_distance']/1000:.1f} km")
     print(f"  繞道比例: {detour['detour_ratio']:.2f}")
     
-    print("\n✓ 路徑感知推薦引擎測試完成!")
+    print("\n 路徑感知推薦引擎測試完成!")

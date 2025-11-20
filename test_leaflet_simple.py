@@ -24,10 +24,10 @@ def test_leaflet():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("🗺️  Leaflet 測試伺服器")
+    print("️  Leaflet 測試伺服器")
     print("=" * 60)
     print("訪問以下地址測試地圖：")
-    print("  📍 http://localhost:5050/test_leaflet")
+    print("   http://localhost:5050/test_leaflet")
     print("=" * 60)
     
     app.run(

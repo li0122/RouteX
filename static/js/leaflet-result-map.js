@@ -42,14 +42,14 @@ class LeafletResultMap {
         
         // 添加瓦片層（支援離線 MBTiles 或在線 OSM）
         if (this.options.useMBTiles && typeof L.tileLayer.mbTiles !== 'undefined') {
-            console.log('🗺️ 使用離線 MBTiles 瓦片');
+            console.log('️ 使用離線 MBTiles 瓦片');
             L.tileLayer.mbTiles(this.options.mbtilesPath, {
                 attribution: '© OpenStreetMap contributors (離線)',
                 minZoom: this.options.minZoom,
                 maxZoom: this.options.maxZoom
             }).addTo(this.map);
         } else {
-            console.log('🌐 使用在線 OSM 瓦片');
+            console.log(' 使用在線 OSM 瓦片');
             L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors',
                 maxZoom: 19
@@ -89,7 +89,7 @@ class LeafletResultMap {
                 html: `<div class="custom-marker" style="background: #10b981; width: 32px; height: 32px; 
                             border-radius: 50%; display: flex; align-items: center; justify-content: center;
                             border: 4px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 20px;">
-                            🟢
+                            
                        </div>`,
                 className: '',
                 iconSize: [32, 32],
@@ -100,7 +100,7 @@ class LeafletResultMap {
         
         marker.bindPopup(`
             <div class="poi-popup">
-                <h3>🟢 出發點</h3>
+                <h3> 出發點</h3>
                 <p><strong>座標:</strong> ${location[0].toFixed(6)}, ${location[1].toFixed(6)}</p>
             </div>
         `);
@@ -114,7 +114,7 @@ class LeafletResultMap {
                 html: `<div class="custom-marker" style="background: #ef4444; width: 32px; height: 32px; 
                             border-radius: 50%; display: flex; align-items: center; justify-content: center;
                             border: 4px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 20px;">
-                            🔴
+                            
                        </div>`,
                 className: '',
                 iconSize: [32, 32],
@@ -125,7 +125,7 @@ class LeafletResultMap {
         
         marker.bindPopup(`
             <div class="poi-popup">
-                <h3>🔴 目的地</h3>
+                <h3> 目的地</h3>
                 <p><strong>座標:</strong> ${location[0].toFixed(6)}, ${location[1].toFixed(6)}</p>
             </div>
         `);
@@ -156,13 +156,13 @@ class LeafletResultMap {
                 <div class="poi-popup">
                     <h3>${poi.name}</h3>
                     <div style="margin: 10px 0;">
-                        <p><strong>🏷️ 類別:</strong> ${poi.primary_category || 'N/A'}</p>
+                        <p><strong>️ 類別:</strong> ${poi.primary_category || 'N/A'}</p>
                         <p><strong>⭐ 評分:</strong> ${poi.avg_rating ? poi.avg_rating.toFixed(1) : 'N/A'} 
                            (${poi.num_reviews || 0} 評論)</p>
-                        <p><strong>🎯 推薦分數:</strong> ${rec.score.toFixed(3)}</p>
+                        <p><strong> 推薦分數:</strong> ${rec.score.toFixed(3)}</p>
                         <p><strong>⏱️ 額外時間:</strong> ${rec.extra_time_minutes ? rec.extra_time_minutes.toFixed(1) : 'N/A'} 分鐘</p>
-                        <p><strong>📍 座標:</strong> ${poi.latitude.toFixed(6)}, ${poi.longitude.toFixed(6)}</p>
-                        ${rec.llm_approved ? '<p><strong>✅ AI 審核通過</strong></p>' : ''}
+                        <p><strong> 座標:</strong> ${poi.latitude.toFixed(6)}, ${poi.longitude.toFixed(6)}</p>
+                        ${rec.llm_approved ? '<p><strong> AI 審核通過</strong></p>' : ''}
                     </div>
                 </div>
             `;
@@ -178,7 +178,7 @@ class LeafletResultMap {
     drawSimpleRoute(start, recommendations, end) {
         // 單點推薦模式：不自動繪製路徑，等待用戶點擊
         if (this.mode === 'poi') {
-            console.log('📍 單點推薦模式：路徑隱藏，點擊卡片顯示');
+            console.log(' 單點推薦模式：路徑隱藏，點擊卡片顯示');
             return;
         }
         
@@ -196,7 +196,7 @@ class LeafletResultMap {
             dashArray: '10, 10'
         }).addTo(this.map);
         
-        console.log('📍 繪製簡單路線（行程模式）');
+        console.log(' 繪製簡單路線（行程模式）');
     }
     
     async showSinglePOIRoute(poiIndex) {
@@ -219,7 +219,7 @@ class LeafletResultMap {
         
         // 請求 OSRM 路線：起點 → POI → 終點
         try {
-            console.log(`🚗 請求 POI ${poiIndex + 1} 的路線...`);
+            console.log(` 請求 POI ${poiIndex + 1} 的路線...`);
             
             const waypoints = [this.startLocation, poiLocation, this.endLocation];
             
@@ -265,7 +265,7 @@ class LeafletResultMap {
                 .setContent(`
                     <div style="text-align: center; padding: 8px;">
                         <strong style="font-size: 15px; color: white;">${poi.poi.name}</strong><br>
-                        <span style="color: white; font-size: 14px; font-weight: 600;">📍 ${distance} km | ⏱️ ${duration} 分鐘</span>
+                        <span style="color: white; font-size: 14px; font-weight: 600;"> ${distance} km | ⏱️ ${duration} 分鐘</span>
                     </div>
                 `)
                 .addTo(this.map);
@@ -273,7 +273,7 @@ class LeafletResultMap {
                 // 調整視圖以顯示完整路線
                 this.map.fitBounds(this.currentRoute.getBounds(), { padding: [50, 50] });
                 
-                console.log(`✅ POI ${poiIndex + 1} 路線繪製完成`);
+                console.log(` POI ${poiIndex + 1} 路線繪製完成`);
             }
         } catch (error) {
             console.error('路線請求失敗:', error);
@@ -313,7 +313,7 @@ class LeafletResultMap {
         
         // 行程推薦模式：繪裭 OSRM 路線
         try {
-            console.log('🚗 開始請求 OSRM 路線...');
+            console.log(' 開始請求 OSRM 路線...');
             
             const waypoints = [
                 start,
@@ -372,15 +372,15 @@ class LeafletResultMap {
                     .setLatLng(midPoint)
                     .setContent(`
                         <div style="text-align: center;">
-                            <strong>🗺️ 路線資訊</strong><br>
-                            <p>📏 距離: <strong>${distance} km</strong></p>
+                            <strong>️ 路線資訊</strong><br>
+                            <p> 距離: <strong>${distance} km</strong></p>
                             <p>⏱️ 時間: <strong>${duration} 分鐘</strong></p>
-                            <p>📍 路線點: ${coordinates.length}</p>
+                            <p> 路線點: ${coordinates.length}</p>
                         </div>
                     `)
                     .openOn(this.map);
                 
-                console.log(`✅ OSRM 路線加載成功！`);
+                console.log(` OSRM 路線加載成功！`);
                 console.log(`   距離: ${distance} km`);
                 console.log(`   時間: ${duration} 分鐘`);
                 console.log(`   路線點數: ${coordinates.length}`);
@@ -390,8 +390,8 @@ class LeafletResultMap {
             }
             
         } catch (error) {
-            console.error('❌ OSRM 路線加載失敗:', error.message);
-            console.warn('⚠️ 使用簡單路線顯示');
+            console.error(' OSRM 路線加載失敗:', error.message);
+            console.warn('️ 使用簡單路線顯示');
         }
     }
     

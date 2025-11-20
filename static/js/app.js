@@ -360,11 +360,11 @@ function initItineraryMap(itinerary) {
     });
     
     if (validStops.length === 0) {
-        console.error('❌ 沒有有效的景點數據');
+        console.error(' 沒有有效的景點數據');
         return;
     }
     
-    console.log('✅ 有效景點:', validStops.length, '/', itinerary.stops.length);
+    console.log(' 有效景點:', validStops.length, '/', itinerary.stops.length);
     
     // 構建行程路線數據
     const routeData = {
@@ -384,7 +384,7 @@ function initItineraryMap(itinerary) {
         }))
     };
     
-    console.log('📍 路線數據:', routeData);
+    console.log(' 路線數據:', routeData);
     
     // 保存到全局變量供卡片點擊使用
     window.map = map;
@@ -392,7 +392,7 @@ function initItineraryMap(itinerary) {
     try {
         map.setData(routeData, 'itinerary'); // 傳遞 'itinerary' 模式
     } catch (error) {
-        console.error('❌ 地圖初始化錯誤:', error);
+        console.error(' 地圖初始化錯誤:', error);
     }
 }
 
@@ -457,7 +457,7 @@ function displayItineraryCard(itinerary) {
     
     card.innerHTML = `
         <div class="itinerary-header">
-            <div class="itinerary-icon">🗺️</div>
+            <div class="itinerary-icon">️</div>
             <div>
                 <h3 class="itinerary-title">${itinerary.title || '旅遊行程'}</h3>
             </div>
@@ -643,7 +643,7 @@ function createRecommendationCard(rec, rank) {
             navigator.clipboard.writeText(coordText).then(() => {
                 // 顯示複製成功提示
                 const originalTitle = coordValue.getAttribute('title');
-                coordValue.setAttribute('title', '已複製! ✓');
+                coordValue.setAttribute('title', '已複製! ');
                 coordValue.style.background = 'rgba(34, 197, 94, 0.1)';
                 
                 setTimeout(() => {

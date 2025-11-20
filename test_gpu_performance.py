@@ -157,11 +157,11 @@ def simple_gpu_test(user_count=1000, poi_count=5000):
         del a, b, mask, result
         torch.cuda.empty_cache()
         
-        print("  ✓ 簡單 GPU 測試成功")
+        print("   簡單 GPU 測試成功")
         return True
         
     except Exception as e:
-        print(f"  ✗ 簡單 GPU 測試失敗: {e}")
+        print(f"   簡單 GPU 測試失敗: {e}")
         torch.cuda.empty_cache()
         return False
 
@@ -175,7 +175,7 @@ def run_gpu_performance_test():
     # 先運行簡單GPU測試
     print("首先運行簡單GPU測試...")
     if not simple_gpu_test():
-        print("❌ 簡單GPU測試失敗，跳過完整測試")
+        print(" 簡單GPU測試失敗，跳過完整測試")
         return
     
     # 檢查GPU狀態
@@ -184,7 +184,7 @@ def run_gpu_performance_test():
         print(f"GPU記憶體: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
         print(f"CUDA版本: {torch.version.cuda}")
     else:
-        print("⚠️ GPU不可用，只能進行CPU測試")
+        print("️ GPU不可用，只能進行CPU測試")
     
     print()
     
@@ -218,9 +218,9 @@ def run_gpu_performance_test():
                 print(f"  時間節省: {((cpu_time - gpu_time) / cpu_time * 100):.1f}%")
                 
                 if abs(cpu_samples - gpu_samples) / max(cpu_samples, 1) > 0.1:
-                    print(f"  ⚠️ 樣本數差異: CPU={cpu_samples:,}, GPU={gpu_samples:,}")
+                    print(f"  ️ 樣本數差異: CPU={cpu_samples:,}, GPU={gpu_samples:,}")
                 else:
-                    print(f"  ✓ 樣本數一致: {cpu_samples:,}")
+                    print(f"   樣本數一致: {cpu_samples:,}")
             else:
                 print("GPU測試失敗")
         else:
@@ -233,15 +233,15 @@ def check_gpu_capability():
     print("GPU能力檢查:")
     
     if not torch.cuda.is_available():
-        print("  ❌ CUDA不可用")
+        print("   CUDA不可用")
         return False
     
-    print(f"  ✓ CUDA可用 (版本: {torch.version.cuda})")
-    print(f"  ✓ GPU數量: {torch.cuda.device_count()}")
+    print(f"   CUDA可用 (版本: {torch.version.cuda})")
+    print(f"   GPU數量: {torch.cuda.device_count()}")
     
     for i in range(torch.cuda.device_count()):
         props = torch.cuda.get_device_properties(i)
-        print(f"  ✓ GPU {i}: {props.name}")
+        print(f"   GPU {i}: {props.name}")
         print(f"    記憶體: {props.total_memory / 1024**3:.1f} GB")
         print(f"    計算能力: {props.major}.{props.minor}")
         print(f"    多處理器: {props.multi_processor_count}")
@@ -251,12 +251,12 @@ def check_gpu_capability():
         device = torch.device('cuda')
         test_tensor = torch.randn(1000, 1000, device=device)
         result = torch.matmul(test_tensor, test_tensor)
-        print(f"  ✓ GPU運算測試通過")
+        print(f"   GPU運算測試通過")
         del test_tensor, result
         torch.cuda.empty_cache()
         return True
     except Exception as e:
-        print(f"  ❌ GPU運算測試失敗: {e}")
+        print(f"   GPU運算測試失敗: {e}")
         return False
 
 def main():

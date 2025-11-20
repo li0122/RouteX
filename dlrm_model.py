@@ -545,4 +545,4 @@ if __name__ == "__main__":
     print(f"\n預測分數:")
     print(output['scores'].squeeze())
     
-    print("\n✓ DLRM 模型測試成功!")
+    print("\n DLRM 模型測試成功!")

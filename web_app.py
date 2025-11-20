@@ -50,7 +50,7 @@ def init_recommender():
     try:
         # 創建OSRM客戶端
         osrm_client = OSRMClient(server_url="http://140.125.32.60:5000")
-        print("✅ OSRM客戶端創建成功")
+        print(" OSRM客戶端創建成功")
         
         # 創建推薦器
         recommender = create_route_recommender(
@@ -118,7 +118,7 @@ def recommend():
         categories = data.get('categories', [])
         top_k = data.get('top_k', 5)
         
-        print(f"\n📍 收到推薦請求:")
+        print(f"\n 收到推薦請求:")
         print(f"   起點: {start_location}")
         print(f"   終點: {end_location}")
         
@@ -163,21 +163,21 @@ def recommend():
             )
             
             elapsed = time.time() - start_time
-            print(f"✅ 推薦完成: {len(recommendations)} 個，耗時 {elapsed:.1f}s")
+            print(f" 推薦完成: {len(recommendations)} 個，耗時 {elapsed:.1f}s")
             
         except Exception as e:
             elapsed = time.time() - start_time
-            print(f"❌ 推薦失敗: {e}，耗時 {elapsed:.1f}s")
+            print(f" 推薦失敗: {e}，耗時 {elapsed:.1f}s")
             raise
         
         # 格式化返回結果
-        print(f"📦 正在格式化 {len(recommendations)} 個推薦結果...")
+        print(f" 正在格式化 {len(recommendations)} 個推薦結果...")
         
         try:
             formatted_recs = format_recommendations(recommendations)
-            print(f"✅ 格式化完成")
+            print(f" 格式化完成")
         except Exception as e:
-            print(f"❌ 格式化失敗: {e}")
+            print(f" 格式化失敗: {e}")
             import traceback
             traceback.print_exc()
             # 返回簡化版本
@@ -206,7 +206,7 @@ def recommend():
             'processing_time': elapsed
         }
         
-        print(f"🚀 返回結果: {len(formatted_recs)} 個推薦")
+        print(f" 返回結果: {len(formatted_recs)} 個推薦")
         return jsonify(result)
         
     except Exception as e:
@@ -259,7 +259,7 @@ def format_recommendations(recommendations):
             formatted.append(formatted_rec)
             
         except Exception as e:
-            print(f"⚠️ 格式化第 {i+1} 個推薦時出錯: {e}")
+            print(f"️ 格式化第 {i+1} 個推薦時出錯: {e}")
             # 添加簡化版本
             formatted.append({
                 'poi': {
@@ -337,7 +337,7 @@ def recommend_itinerary_api():
         if not recommender:
             return jsonify({'error': '推薦系統未初始化'}), 500
         
-        print(f"\n🗺️ 行程推薦請求:")
+        print(f"\n️ 行程推薦請求:")
         print(f"   起點: {start}")
         print(f"   終點: {end}")
         print(f"   活動: {activity_intent}")
@@ -357,7 +357,7 @@ def recommend_itinerary_api():
         )
         
         elapsed = time.time() - start_time
-        print(f"✅ 行程生成完成，耗時 {elapsed:.1f}s")
+        print(f" 行程生成完成，耗時 {elapsed:.1f}s")
         
         # 格式化為單一行程卡片
         stops = []
@@ -371,7 +371,7 @@ def recommend_itinerary_api():
             longitude = poi.get('longitude')
             
             if latitude is None or longitude is None:
-                print(f"⚠️ 跳過無效POI: {poi.get('name', 'Unknown')} (缺少座標)")
+                print(f"️ 跳過無效POI: {poi.get('name', 'Unknown')} (缺少座標)")
                 continue
             
             stop = {
@@ -413,11 +413,11 @@ def recommend_itinerary_api():
             'processing_time': elapsed
         }
         
-        print(f"📦 返回行程: {len(stops)} 個景點")
+        print(f" 返回行程: {len(stops)} 個景點")
         return jsonify(itinerary_card)
         
     except Exception as e:
-        print(f"❌ 行程推薦錯誤: {e}")
+        print(f" 行程推薦錯誤: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -482,7 +482,7 @@ def get_route():
         if alternatives:
             params['alternatives'] = 'true'
         
-        print(f"🗺️ 請求 OSRM 路線: {len(waypoints)} 個點")
+        print(f"️ 請求 OSRM 路線: {len(waypoints)} 個點")
         
         # 調用 OSRM API
         response = requests.get(url, params=params, timeout=15)
@@ -510,17 +510,17 @@ def get_route():
             'waypoints': osrm_data.get('waypoints', [])
         }
         
-        print(f"✅ OSRM 路線成功: {route.get('distance', 0)/1000:.1f} km, {route.get('duration', 0)/60:.0f} 分鐘")
+        print(f" OSRM 路線成功: {route.get('distance', 0)/1000:.1f} km, {route.get('duration', 0)/60:.0f} 分鐘")
         
         return jsonify(result)
         
     except requests.Timeout:
         return jsonify({'error': 'OSRM 請求超時'}), 504
     except requests.RequestException as e:
-        print(f"❌ OSRM 請求失敗: {e}")
+        print(f" OSRM 請求失敗: {e}")
         return jsonify({'error': f'OSRM 請求失敗: {str(e)}'}), 502
     except Exception as e:
-        print(f"❌ 路線獲取錯誤: {e}")
+        print(f" 路線獲取錯誤: {e}")
         return jsonify({'error': f'伺服器錯誤: {str(e)}'}), 500
 
 
@@ -539,7 +539,7 @@ def internal_error(error):
 if __name__ == '__main__':
     # 初始化推薦器
     print("="*60)
-    print("🚀 RouteX Web Server")
+    print(" RouteX Web Server")
     print("="*60)
     
     init_recommender()

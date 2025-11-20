@@ -148,9 +148,9 @@ def run_performance_test():
         print(f"  時間節省: {((serial_time - parallel_time) / serial_time * 100):.1f}%")
         
         if abs(serial_samples - parallel_samples) / max(serial_samples, 1) > 0.1:
-            print(f"  ⚠️ 樣本數差異較大: 串行={serial_samples:,}, 並行={parallel_samples:,}")
+            print(f"  ️ 樣本數差異較大: 串行={serial_samples:,}, 並行={parallel_samples:,}")
         else:
-            print(f"  ✓ 樣本數一致: {serial_samples:,}")
+            print(f"   樣本數一致: {serial_samples:,}")
 
 def check_system_resources():
     """檢查系統資源"""

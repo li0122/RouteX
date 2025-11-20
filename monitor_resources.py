@@ -165,11 +165,11 @@ def monitor_resources(duration_minutes=30, interval_seconds=10):
             # 資源利用率評估
             print("\\n資源利用率評估:")
             if max_values['cpu_percent'] < 50:
-                print("  ⚠️  CPU利用率較低，可考慮增加並行worker數量")
+                print("  ️  CPU利用率較低，可考慮增加並行worker數量")
             if max_values['memory_percent'] < 50:
-                print("  ⚠️  記憶體利用率較低，可考慮增加批次大小或資料量")
+                print("  ️  記憶體利用率較低，可考慮增加批次大小或資料量")
             if max_values['gpu_utilization'] < 70:
-                print("  ⚠️  GPU利用率較低，可考慮增大模型或批次大小")
+                print("  ️  GPU利用率較低，可考慮增大模型或批次大小")
             
             print("=" * 80)
             

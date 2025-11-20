@@ -75,14 +75,14 @@ class POIDataProcessor:
                     except json.JSONDecodeError:
                         continue
         except FileNotFoundError:
-            print(f"❌ 找不到檔案: {self.dataset_path}")
+            print(f" 找不到檔案: {self.dataset_path}")
             print(f"請確認檔案位於正確位置")
             return []
         
         self.raw_pois = pois
         self.pois = pois
 
-        print(f"✓ 成功載入 {len(pois)} 個 POI")
+        print(f" 成功載入 {len(pois)} 個 POI")
         
         return pois
     
@@ -364,12 +364,12 @@ class ReviewDataProcessor:
                     except json.JSONDecodeError:
                         continue
         except FileNotFoundError:
-            print(f"❌ 找不到檔案: {self.dataset_path}")
+            print(f" 找不到檔案: {self.dataset_path}")
             print(f"請確認檔案位於正確位置")
             return []
         
         self.reviews = reviews
-        print(f"✓ 成功載入 {len(reviews)} 條評論")
+        print(f" 成功載入 {len(reviews)} 條評論")
         
         return reviews
     
@@ -526,4 +526,4 @@ if __name__ == "__main__":
     nearby = poi_processor.get_pois_by_location(37.7749, -122.4194, radius_km=10.0)
     print(f"\n舊金山市中心附近 10km 內有 {len(nearby)} 個 POI")
     
-    print("\n✓ 數據處理測試完成!")
+    print("\n 數據處理測試完成!")

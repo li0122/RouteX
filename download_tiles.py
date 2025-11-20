@@ -71,7 +71,7 @@ class TileDownloader:
         
         conn.commit()
         conn.close()
-        print(f"✅ 資料庫初始化完成: {self.output_file}")
+        print(f" 資料庫初始化完成: {self.output_file}")
     
     def latlon_to_tile(self, lat, lon, zoom):
         """將經緯度轉換為瓦片座標"""
@@ -110,7 +110,7 @@ class TileDownloader:
             
             return (zoom, x, tms_y, response.content)
         except Exception as e:
-            print(f"❌ 下載失敗 [{zoom}/{x}/{y}]: {e}")
+            print(f" 下載失敗 [{zoom}/{x}/{y}]: {e}")
             return None
     
     def save_tile(self, zoom, x, y, data):
@@ -125,7 +125,7 @@ class TileDownloader:
             )
             conn.commit()
         except Exception as e:
-            print(f"❌ 保存失敗 [{zoom}/{x}/{y}]: {e}")
+            print(f" 保存失敗 [{zoom}/{x}/{y}]: {e}")
         finally:
             conn.close()
     
@@ -139,7 +139,7 @@ class TileDownloader:
             tiles = self.get_tile_bounds(min_lat, min_lon, max_lat, max_lon, zoom)
             total_tiles += len(tiles)
         
-        print(f"\n📦 開始下載瓦片")
+        print(f"\n 開始下載瓦片")
         print(f"   範圍: [{min_lat}, {min_lon}] 到 [{max_lat}, {max_lon}]")
         print(f"   縮放級別: {zoom_min} - {zoom_max}")
         print(f"   總瓦片數: {total_tiles}")
@@ -149,7 +149,7 @@ class TileDownloader:
         # 下載瓦片
         for zoom in range(zoom_min, zoom_max + 1):
             tiles = self.get_tile_bounds(min_lat, min_lon, max_lat, max_lon, zoom)
-            print(f"\n🔄 縮放級別 {zoom}: {len(tiles)} 個瓦片")
+            print(f"\n 縮放級別 {zoom}: {len(tiles)} 個瓦片")
             
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 futures = {
@@ -171,7 +171,7 @@ class TileDownloader:
                     # 延遲以避免服務器限制
                     time.sleep(0.1)
         
-        print(f"\n✅ 下載完成！")
+        print(f"\n 下載完成！")
         print(f"   成功: {downloaded_tiles}/{total_tiles}")
         print(f"   輸出: {self.output_file}")
         
@@ -197,27 +197,27 @@ def main():
     try:
         min_lat, min_lon, max_lat, max_lon = map(float, args.bbox.split(','))
     except:
-        print("❌ 邊界框格式錯誤！應為: min_lat,min_lon,max_lat,max_lon")
+        print(" 邊界框格式錯誤！應為: min_lat,min_lon,max_lat,max_lon")
         sys.exit(1)
     
     # 解析縮放級別
     try:
         zoom_min, zoom_max = map(int, args.zoom.split('-'))
     except:
-        print("❌ 縮放級別格式錯誤！應為: min-max")
+        print(" 縮放級別格式錯誤！應為: min-max")
         sys.exit(1)
     
     # 驗證參數
     if not (-90 <= min_lat <= 90 and -90 <= max_lat <= 90):
-        print("❌ 緯度必須在 -90 到 90 之間")
+        print(" 緯度必須在 -90 到 90 之間")
         sys.exit(1)
     
     if not (-180 <= min_lon <= 180 and -180 <= max_lon <= 180):
-        print("❌ 經度必須在 -180 到 180 之間")
+        print(" 經度必須在 -180 到 180 之間")
         sys.exit(1)
     
     if not (0 <= zoom_min <= 18 and 0 <= zoom_max <= 18 and zoom_min <= zoom_max):
-        print("❌ 縮放級別必須在 0 到 18 之間，且 min <= max")
+        print(" 縮放級別必須在 0 到 18 之間，且 min <= max")
         sys.exit(1)
     
     # 創建輸出目錄
@@ -225,7 +225,7 @@ def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     print("=" * 60)
-    print("🗺️  OSM 瓦片下載器")
+    print("️  OSM 瓦片下載器")
     print("=" * 60)
     
     # 下載瓦片
@@ -233,7 +233,7 @@ def main():
     downloader.download_tiles(min_lat, min_lon, max_lat, max_lon, zoom_min, zoom_max)
     
     print("\n" + "=" * 60)
-    print("🎉 完成！")
+    print(" 完成！")
     print("=" * 60)
 
 

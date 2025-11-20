@@ -100,12 +100,12 @@
 </head>
 <body>
     <div class="container">
-        <h1>🗺️ Leaflet 地圖測試頁面</h1>
+        <h1>️ Leaflet 地圖測試頁面</h1>
         <p class="subtitle">RouteX - Leaflet + OSM 整合驗證</p>
 
         <!-- 測試 1: 地圖選擇器 -->
         <div class="test-section">
-            <h2>📍 測試 1: 地圖選擇器</h2>
+            <h2> 測試 1: 地圖選擇器</h2>
             <div class="info-box">
                 <strong>功能測試：</strong>點擊地圖選擇起點和終點
             </div>
@@ -114,13 +114,13 @@
             
             <div class="button-group">
                 <button class="btn-start" onclick="testMapPicker.setMode('start')">
-                    🟢 設定起點
+                     設定起點
                 </button>
                 <button class="btn-end" onclick="testMapPicker.setMode('end')">
-                    🔴 設定終點
+                     設定終點
                 </button>
                 <button class="btn-test" onclick="quickTestPicker()">
-                    ⚡ 快速測試（金門大橋→漁人碼頭）
+                     快速測試（金門大橋→漁人碼頭）
                 </button>
             </div>
             
@@ -132,7 +132,7 @@
 
         <!-- 測試 2: 結果地圖 -->
         <div class="test-section">
-            <h2>🎯 測試 2: 結果地圖與 OSRM 路線</h2>
+            <h2> 測試 2: 結果地圖與 OSRM 路線</h2>
             <div class="info-box">
                 <strong>功能測試：</strong>顯示推薦地點和 OSRM 實際路線
             </div>
@@ -154,7 +154,7 @@
 
         <!-- 狀態日誌 -->
         <div class="test-section">
-            <h2>📝 測試日誌</h2>
+            <h2> 測試日誌</h2>
             <div class="status" id="log-container">
                 <div class="status-line">等待測試...</div>
             </div>
@@ -174,7 +174,7 @@
         // 日誌函數
         function log(message, type = 'info') {
             const timestamp = new Date().toLocaleTimeString();
-            const prefix = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+            const prefix = type === 'success' ? '' : type === 'error' ? '' : 'ℹ️';
             const line = `[${timestamp}] ${prefix} ${message}`;
             logLines.push(line);
             if (logLines.length > 50) logLines.shift();

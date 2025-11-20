@@ -162,7 +162,7 @@ class OfflineResultMap {
         // 繪製終點
         if (this.endLocation) {
             const pos = this.latLngToPixel(this.endLocation[0], this.endLocation[1]);
-            this.drawMarker(pos, '#ef4444', '終點', '🏁');
+            this.drawMarker(pos, '#ef4444', '終點', '');
         }
         
         // 繪製 POI

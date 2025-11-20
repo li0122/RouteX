@@ -57,7 +57,7 @@ def check_file(filepath: str) -> Optional[dict]:
 
 def main():
     print("=" * 70)
-    print("📊 資料集驗證工具")
+    print(" 資料集驗證工具")
     print("=" * 70)
     
     # 定義要檢查的資料集
@@ -80,14 +80,14 @@ def main():
         result = check_file(filepath)
         
         if result is None:
-            print(f"  ❌ 檔案不存在")
+            print(f"   檔案不存在")
             missing_datasets.append((name, filepath))
         elif not result['readable']:
-            print(f"  ⚠️  檔案存在但無法讀取")
+            print(f"  ️  檔案存在但無法讀取")
             print(f"  大小: {result['size_mb']:.2f} MB")
             print(f"  錯誤: {result.get('error', 'Unknown')}")
         else:
-            print(f"  ✅ 檔案正常")
+            print(f"   檔案正常")
             if result['size_gb'] >= 1:
                 print(f"  大小: {result['size_gb']:.2f} GB")
             else:
@@ -99,10 +99,10 @@ def main():
     
     # 總結
     print("\n" + "=" * 70)
-    print("📋 檢查總結")
+    print(" 檢查總結")
     print("=" * 70)
-    print(f"✅ 找到 {len(found_datasets)} 個可用資料集")
-    print(f"❌ 缺少 {len(missing_datasets)} 個資料集")
+    print(f" 找到 {len(found_datasets)} 個可用資料集")
+    print(f" 缺少 {len(missing_datasets)} 個資料集")
     
     if found_datasets:
         print("\n可用資料集：")
@@ -117,7 +117,7 @@ def main():
     
     # 推薦使用的資料集
     print("\n" + "=" * 70)
-    print("💡 使用建議")
+    print(" 使用建議")
     print("=" * 70)
     
     # 檢查是否有 California 資料集
@@ -125,7 +125,7 @@ def main():
     has_other = any('other' in filepath for _, filepath, _ in found_datasets)
     
     if has_california:
-        print("🎯 推薦使用完整 California 資料集進行訓練：")
+        print(" 推薦使用完整 California 資料集進行訓練：")
         print("   python train_model.py \\")
         print("     --meta-path datasets/meta-California.json.gz \\")
         print("     --review-path datasets/review-California.json.gz \\")
@@ -134,7 +134,7 @@ def main():
         print("     --epochs 20")
     
     if has_other:
-        print("\n🧪 快速測試使用小型資料集：")
+        print("\n 快速測試使用小型資料集：")
         print("   python train_model.py \\")
         print("     --meta-path datasets/meta-other.json \\")
         print("     --review-path datasets/review-other.json \\")
@@ -143,7 +143,7 @@ def main():
         print("     --epochs 5")
     
     if not has_california and not has_other:
-        print("\n⚠️  未找到任何可用的資料集！")
+        print("\n️  未找到任何可用的資料集！")
         print("請確認資料集檔案已放置在 datasets/ 目錄中。")
     
     print("\n" + "=" * 70)

@@ -283,7 +283,7 @@ def load_data_in_shards(
             print(f"  處理最後分片 ({len(current_shard)} 條評論)...")
             review_processor.reviews.extend(current_shard)
     
-    print(f"✓ 成功載入 {len(review_processor.reviews)} 條評論（{shard_num} 個分片）")
+    print(f" 成功載入 {len(review_processor.reviews)} 條評論（{shard_num} 個分片）")
     
     # 預處理評論資料
     review_processor.preprocess()
@@ -335,7 +335,7 @@ class TravelRecommendDataset(Dataset):
                     if poi_id and poi_id in self.poi_processor.poi_index:
                         samples.append((user_id, poi_id, 1))
         
-        print(f"✓ 生成 {len(samples)} 個正樣本索引")
+        print(f" 生成 {len(samples)} 個正樣本索引")
         
         # 超高效負樣本生成策略
         print("正在生成負樣本（超高效索引模式）...")
@@ -390,13 +390,13 @@ class TravelRecommendDataset(Dataset):
             device=torch.device('cuda')
         )
         
-        print(f"\n✓ 成功生成 {len(negative_samples):,} 個負樣本索引")
-        print(f"✓ 總樣本數: {len(samples) + len(negative_samples):,} (正樣本: {len(samples):,}, 負樣本: {len(negative_samples):,})")
+        print(f"\n 成功生成 {len(negative_samples):,} 個負樣本索引")
+        print(f" 總樣本數: {len(samples) + len(negative_samples):,} (正樣本: {len(samples):,}, 負樣本: {len(negative_samples):,})")
         
         samples.extend(negative_samples)
         print("  正在打亂樣本順序...")
         np.random.shuffle(samples)
-        print("✓ 樣本創建完成!")
+        print(" 樣本創建完成!")
         
         return samples
     
@@ -416,7 +416,7 @@ class TravelRecommendDataset(Dataset):
                     if poi_id and poi_id in self.poi_processor.poi_index:
                         samples.append((user_id, poi_id, 1))
         
-        print(f"✓ 生成 {len(samples)} 個正樣本")
+        print(f" 生成 {len(samples)} 個正樣本")
         
         # 超高效負樣本生成策略
         print("正在生成負樣本（超高效模式）...")
@@ -470,15 +470,15 @@ class TravelRecommendDataset(Dataset):
             device=torch.device('cuda')
         )
         
-        print(f"\n✓ 成功生成 {len(negative_samples):,} 個負樣本")
-        print(f"✓ 總樣本數: {len(samples) + len(negative_samples):,} (正樣本: {len(samples):,}, 負樣本: {len(negative_samples):,})")
+        print(f"\n 成功生成 {len(negative_samples):,} 個負樣本")
+        print(f" 總樣本數: {len(samples) + len(negative_samples):,} (正樣本: {len(samples):,}, 負樣本: {len(negative_samples):,})")
         
         samples.extend(negative_samples)
         
         # 打亂
         print("  正在打亂樣本順序...")
         np.random.shuffle(samples)
-        print("✓ 樣本創建完成!")
+        print(" 樣本創建完成!")
         
         return samples
     
@@ -631,7 +631,7 @@ def evaluate(
             'recall': recall_score(all_labels, predictions)
         }
     except ImportError:
-        print("⚠️ sklearn 未安裝，使用簡單指標計算")
+        print("️ sklearn 未安裝，使用簡單指標計算")
         predictions = (all_scores > 0.5).astype(int)
         
         # 簡單指標計算
@@ -675,7 +675,7 @@ def main(args):
         
         print(f"GPU記憶體優化已啟用")
     else:
-        raise RuntimeError("⚠️ GPU不可用，無法執行")
+        raise RuntimeError("️ GPU不可用，無法執行")
     
     # 檢查記憶體（可選）
     try:
@@ -687,11 +687,11 @@ def main(args):
         # 根據記憶體決定模式
         memory_efficient = ram_gb < 16 or args.memory_efficient
     except ImportError:
-        print("⚠️ psutil 未安裝，無法檢測記憶體")
+        print("️ psutil 未安裝，無法檢測記憶體")
         memory_efficient = args.memory_efficient
     
     if memory_efficient:
-        print("⚠️  啟用記憶體高效模式")
+        print("️  啟用記憶體高效模式")
     
     # 載入數據（分片模式）
     print("\n載入數據...")
@@ -725,10 +725,10 @@ def main(args):
             gpu_batch_size=args.gpu_batch_size
         )
         
-        print(f"✓ 數據集創建成功")
+        print(f" 數據集創建成功")
         
     except torch.cuda.OutOfMemoryError as e:
-        print(f"❌ GPU記憶體不足: {e}")
+        print(f" GPU記憶體不足: {e}")
         print(f"建議解決方案:")
         print(f"  1. 減少 --max-reviews 參數 (目前: {args.max_reviews})")
         print(f"  2. 減小 --negative-ratio (目前: {args.negative_ratio})")
@@ -737,7 +737,7 @@ def main(args):
         return
         
     except Exception as e:
-        print(f"❌ 數據集創建失敗: {e}")
+        print(f" 數據集創建失敗: {e}")
         import traceback
         traceback.print_exc()
         return
@@ -838,13 +838,13 @@ def main(args):
         # 訓練
         print(f"\n[訓練階段] 處理 {len(train_loader)} 個批次...")
         train_loss = train_epoch(model, train_loader, optimizer, None, device)
-        print(f"\n✓ 訓練完成")
+        print(f"\n 訓練完成")
         print(f"  訓練損失: {train_loss:.4f}")
         
         # 驗證
         print(f"\n[驗證階段] 評估模型效能...")
         val_metrics = evaluate(model, val_loader, device)
-        print(f"\n✓ 驗證完成")
+        print(f"\n 驗證完成")
         print(f"  驗證指標:")
         print(f"    - AUC: {val_metrics['auc']:.4f}")
         print(f"    - Accuracy: {val_metrics['accuracy']:.4f}")
@@ -868,7 +868,7 @@ def main(args):
                 'poi_vocab_sizes': poi_vocab_sizes
             }
             torch.save(checkpoint, args.checkpoint_path)
-            print(f"✓ 保存最佳模型 (AUC: {best_auc:.4f})")
+            print(f" 保存最佳模型 (AUC: {best_auc:.4f})")
     
     total_training_time = time.time() - training_start_time
     hours = int(total_training_time // 3600)
@@ -886,7 +886,7 @@ def main(args):
     
     # 保存處理器
     poi_processor.save(args.processor_path)
-    print(f"✓ 數據處理器已保存到 {args.processor_path}")
+    print(f" 數據處理器已保存到 {args.processor_path}")
 
 
 if __name__ == "__main__":

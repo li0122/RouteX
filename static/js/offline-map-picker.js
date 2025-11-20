@@ -39,12 +39,12 @@ class OfflineMapPicker {
 
         // 預設地點
         this.presetLocations = [
-            { name: '舊金山市中心', lat: 37.7749, lng: -122.4194, icon: '🏙️', color: '#f59e0b' },
-            { name: '金門大橋', lat: 37.8199, lng: -122.4783, icon: '🌉', color: '#ef4444' },
-            { name: '漁人碼頭', lat: 37.8080, lng: -122.4177, icon: '⛵', color: '#3b82f6' },
-            { name: '金門公園', lat: 37.7694, lng: -122.4862, icon: '🌳', color: '#10b981' },
-            { name: '雙子峰', lat: 37.7544, lng: -122.4477, icon: '⛰️', color: '#8b5cf6' },
-            { name: '聯合廣場', lat: 37.7880, lng: -122.4075, icon: '🏛️', color: '#ec4899' },
+            { name: '舊金山市中心', lat: 37.7749, lng: -122.4194, icon: '️', color: '#f59e0b' },
+            { name: '金門大橋', lat: 37.8199, lng: -122.4783, icon: '', color: '#ef4444' },
+            { name: '漁人碼頭', lat: 37.8080, lng: -122.4177, icon: '', color: '#3b82f6' },
+            { name: '金門公園', lat: 37.7694, lng: -122.4862, icon: '', color: '#10b981' },
+            { name: '雙子峰', lat: 37.7544, lng: -122.4477, icon: '️', color: '#8b5cf6' },
+            { name: '聯合廣場', lat: 37.7880, lng: -122.4075, icon: '️', color: '#ec4899' },
         ];
 
         this.init();
@@ -108,10 +108,10 @@ class OfflineMapPicker {
         this.drawPresetLocations();
 
         if (this.startMarker) {
-            this.drawMarker(this.startMarker.lat, this.startMarker.lng, '🟢', '#10b981', '出發點');
+            this.drawMarker(this.startMarker.lat, this.startMarker.lng, '', '#10b981', '出發點');
         }
         if (this.endMarker) {
-            this.drawMarker(this.endMarker.lat, this.endMarker.lng, '🔴', '#ef4444', '目的地');
+            this.drawMarker(this.endMarker.lat, this.endMarker.lng, '', '#ef4444', '目的地');
         }
 
         if (this.startMarker && this.endMarker) {

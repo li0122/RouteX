@@ -62,7 +62,7 @@ class OSRMRouteClient:
                 if time.time() - cached_data.get('timestamp', 0) < 86400:
                     return cached_data['data']
             except Exception as e:
-                print(f"⚠️ 快取讀取失敗: {e}")
+                print(f"️ 快取讀取失敗: {e}")
         
         return None
     
@@ -79,7 +79,7 @@ class OSRMRouteClient:
                     'data': data
                 }, f)
         except Exception as e:
-            print(f"⚠️ 快取寫入失敗: {e}")
+            print(f"️ 快取寫入失敗: {e}")
     
     def get_route(self, 
                   waypoints: List[Tuple[float, float]],
@@ -123,7 +123,7 @@ class OSRMRouteClient:
             cache_key = self._generate_cache_key(waypoints, options)
             cached_data = self._load_from_cache(cache_key)
             if cached_data:
-                print(f"✅ 從快取載入路線")
+                print(f" 從快取載入路線")
                 return cached_data
         
         # 構建請求 URL
@@ -138,7 +138,7 @@ class OSRMRouteClient:
         if alternatives:
             params['alternatives'] = 'true'
         
-        print(f"🗺️ 請求 OSRM 路線: {len(waypoints)} 個點")
+        print(f"️ 請求 OSRM 路線: {len(waypoints)} 個點")
         
         # 發送請求
         try:
@@ -165,7 +165,7 @@ class OSRMRouteClient:
                 'waypoints': data.get('waypoints', [])
             }
             
-            print(f"✅ OSRM 路線成功: {route.get('distance', 0)/1000:.1f} km, "
+            print(f" OSRM 路線成功: {route.get('distance', 0)/1000:.1f} km, "
                   f"{route.get('duration', 0)/60:.0f} 分鐘")
             
             # 保存到快取
@@ -203,7 +203,7 @@ def main():
             lat, lng = map(float, wp.split(','))
             waypoints.append((lat, lng))
     except Exception as e:
-        print(f"❌ 路徑點格式錯誤: {e}")
+        print(f" 路徑點格式錯誤: {e}")
         print("   格式: 'lat1,lng1;lat2,lng2;...'")
         return 1
     
@@ -223,7 +223,7 @@ def main():
         # 顯示結果
         route = result['route']
         print("\n" + "=" * 60)
-        print("📍 路線資訊")
+        print(" 路線資訊")
         print("=" * 60)
         print(f"距離: {route['distance'] / 1000:.2f} km")
         print(f"時間: {route['duration'] / 60:.0f} 分鐘")
@@ -243,7 +243,7 @@ def main():
         return 0
         
     except Exception as e:
-        print(f"\n❌ 錯誤: {e}")
+        print(f"\n 錯誤: {e}")
         return 1
 
 

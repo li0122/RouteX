@@ -45,7 +45,7 @@
     </style>
 </head>
 <body>
-    <h1>🚀 RouteX API 測試頁面</h1>
+    <h1> RouteX API 測試頁面</h1>
     
     <div class="test-section">
         <h2>1. 系統狀態測試</h2>
@@ -74,9 +74,9 @@
             try {
                 const response = await fetch('/api/status');
                 const data = await response.json();
-                result.innerHTML = `<span class="success">✅ 成功</span>\n${JSON.stringify(data, null, 2)}`;
+                result.innerHTML = `<span class="success"> 成功</span>\n${JSON.stringify(data, null, 2)}`;
             } catch (error) {
-                result.innerHTML = `<span class="error">❌ 失敗</span>\n${error.message}`;
+                result.innerHTML = `<span class="error"> 失敗</span>\n${error.message}`;
             }
         }
         
@@ -87,9 +87,9 @@
             try {
                 const response = await fetch('/api/categories');
                 const data = await response.json();
-                result.innerHTML = `<span class="success">✅ 成功</span>\n${JSON.stringify(data, null, 2)}`;
+                result.innerHTML = `<span class="success"> 成功</span>\n${JSON.stringify(data, null, 2)}`;
             } catch (error) {
-                result.innerHTML = `<span class="error">❌ 失敗</span>\n${error.message}`;
+                result.innerHTML = `<span class="error"> 失敗</span>\n${error.message}`;
             }
         }
         
@@ -117,12 +117,12 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    result.innerHTML = `<span class="success">✅ 成功</span>\n獲得 ${data.count} 個推薦\n\n${JSON.stringify(data, null, 2)}`;
+                    result.innerHTML = `<span class="success"> 成功</span>\n獲得 ${data.count} 個推薦\n\n${JSON.stringify(data, null, 2)}`;
                 } else {
-                    result.innerHTML = `<span class="error">❌ 失敗</span>\n${JSON.stringify(data, null, 2)}`;
+                    result.innerHTML = `<span class="error"> 失敗</span>\n${JSON.stringify(data, null, 2)}`;
                 }
             } catch (error) {
-                result.innerHTML = `<span class="error">❌ 失敗</span>\n${error.message}`;
+                result.innerHTML = `<span class="error"> 失敗</span>\n${error.message}`;
             }
         }
     </script>

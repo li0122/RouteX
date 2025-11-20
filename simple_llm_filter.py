@@ -14,7 +14,7 @@ try:
     ASYNC_SUPPORTED = True
 except ImportError:
     ASYNC_SUPPORTED = False
-    print("⚠️ aiohttp 未安裝，併發功能不可用。安裝: pip install aiohttp")
+    print("️ aiohttp 未安裝，併發功能不可用。安裝: pip install aiohttp")
 
 
 class SimpleLLMFilter:
@@ -45,9 +45,9 @@ class SimpleLLMFilter:
         print(f"   端點: {self.base_url}")
         print(f"   模型: {self.model}")
         if ASYNC_SUPPORTED:
-            print(f"   併發支援: ✅ (最大 {max_concurrent} 併發)")
+            print(f"   併發支援:  (最大 {max_concurrent} 併發)")
         else:
-            print(f"   併發支援: ❌ (需安裝 aiohttp)")
+            print(f"   併發支援:  (需安裝 aiohttp)")
     
     def is_travel_relevant(self, poi: Dict[str, Any], user_categories: Optional[List[str]] = None) -> tuple[bool, str, float]:
         """
@@ -155,7 +155,7 @@ class SimpleLLMFilter:
         min_lng = min(start_lng, end_lng)
         max_lng = max(start_lng, end_lng)
         
-        print(f"\n📦 地理邊界框過濾:")
+        print(f"\n 地理邊界框過濾:")
         print(f"   起點: ({start_lat:.6f}, {start_lng:.6f})")
         print(f"   終點: ({end_lat:.6f}, {end_lng:.6f})")
         print(f"   邊界框: 緯度 [{min_lat:.6f}, {max_lat:.6f}]")
@@ -215,7 +215,7 @@ class SimpleLLMFilter:
         
         # 【新增】地理邊界框預過濾
         if start_location and end_location:
-            print(f"\n🌍 啟用地理邊界框預過濾")
+            print(f"\n 啟用地理邊界框預過濾")
             ranked_pois = self._filter_by_bounding_box(
                 ranked_pois, 
                 start_location, 
@@ -223,7 +223,7 @@ class SimpleLLMFilter:
             )
             
             if not ranked_pois:
-                print("⚠️ 警告: 地理過濾後沒有剩餘 POI")
+                print("️ 警告: 地理過濾後沒有剩餘 POI")
                 return []
         
         # 計算早停閾值
@@ -320,7 +320,7 @@ class SimpleLLMFilter:
             通過LLM審核的TOP K POI列表
         """
         if not ASYNC_SUPPORTED:
-            print("⚠️ 併發功能不可用，降級到順序處理")
+            print("️ 併發功能不可用，降級到順序處理")
             return self.sequential_llm_filter_top_k(
                 ranked_pois, target_k, start_location, end_location,
                 3, user_categories, early_stop, early_stop_buffer
@@ -331,7 +331,7 @@ class SimpleLLMFilter:
         
         # 地理邊界框預過濾
         if start_location and end_location:
-            print(f"\n🌍 啟用地理邊界框預過濾")
+            print(f"\n 啟用地理邊界框預過濾")
             ranked_pois = self._filter_by_bounding_box(
                 ranked_pois, 
                 start_location, 
@@ -339,12 +339,12 @@ class SimpleLLMFilter:
             )
             
             if not ranked_pois:
-                print("⚠️ 警告: 地理過濾後沒有剩餘 POI")
+                print("️ 警告: 地理過濾後沒有剩餘 POI")
                 return []
         
         early_stop_threshold = int(target_k * early_stop_buffer) if early_stop else float('inf')
         
-        print(f"\n🚀 開始併發LLM審核流程")
+        print(f"\n 開始併發LLM審核流程")
         print(f"   目標: TOP {target_k} 推薦")
         print(f"   輸入: {len(ranked_pois)} 個排序POI")
         print(f"   併發批次大小: {batch_size}")
@@ -360,7 +360,7 @@ class SimpleLLMFilter:
         for batch_start in range(0, len(ranked_pois), batch_size):
             # 早停檢查
             if early_stop and len(approved_pois) >= early_stop_threshold:
-                print(f"\n✋ 早停觸發！")
+                print(f"\n 早停觸發！")
                 print(f"   已收集 {len(approved_pois)} 個候選（目標 {target_k} 個）")
                 print(f"   停止審核，節省 {len(ranked_pois) - processed_count} 次 LLM 調用")
                 break
@@ -368,7 +368,7 @@ class SimpleLLMFilter:
             batch_end = min(batch_start + batch_size, len(ranked_pois))
             batch_pois = ranked_pois[batch_start:batch_end]
             
-            print(f"\n📦 批次 {batch_start//batch_size + 1}: 併發處理 {len(batch_pois)} 個 POI...")
+            print(f"\n 批次 {batch_start//batch_size + 1}: 併發處理 {len(batch_pois)} 個 POI...")
             
             # 併發調用 LLM
             import asyncio
@@ -387,12 +387,12 @@ class SimpleLLMFilter:
                 
                 if is_relevant:
                     approved_pois.append(poi)
-                    print(f"       ✅ ACCEPT (已收集 {len(approved_pois)} 個)")
+                    print(f"        ACCEPT (已收集 {len(approved_pois)} 個)")
                 else:
-                    print(f"       ❌ REJECT")
+                    print(f"        REJECT")
         
         # 最終結果
-        print(f"\n✨ 併發審核完成!")
+        print(f"\n 併發審核完成!")
         print(f"   審核完成: {processed_count} 個POI")
         print(f"   通過審核: {len(approved_pois)} 個POI")
         print(f"   返回前 {target_k} 名")
@@ -764,7 +764,7 @@ Now please evaluate:"""
                 return self._fallback_itinerary(pois)
                 
         except Exception as e:
-            print(f"⚠️ LLM 行程生成失敗: {e}")
+            print(f"️ LLM 行程生成失敗: {e}")
             return self._fallback_itinerary(pois)
     
     def _build_itinerary_prompt(
@@ -869,7 +869,7 @@ Now please evaluate:"""
                     
                     # 調試：確認 POI 有座標
                     if 'latitude' not in poi or 'longitude' not in poi:
-                        print(f"⚠️ LLM選中的POI缺少座標: {poi.get('name', 'Unknown')}")
+                        print(f"️ LLM選中的POI缺少座標: {poi.get('name', 'Unknown')}")
                         print(f"   rec keys: {list(rec.keys())}")
                         print(f"   poi keys: {list(poi.keys())}")
                     
@@ -904,7 +904,7 @@ Now please evaluate:"""
             }
             
         except Exception as e:
-            print(f"⚠️ 解析行程回覆失敗: {e}")
+            print(f"️ 解析行程回覆失敗: {e}")
             print(f"   原始回覆: {response[:200]}")
             return self._fallback_itinerary(pois)
     

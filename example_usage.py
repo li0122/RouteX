@@ -73,7 +73,7 @@ def example_real_time_recommendation():
         )
         
         # 5. 顯示推薦結果
-        print(f"\n✨ 為您推薦 {len(recommendations)} 個沿途景點:")
+        print(f"\n 為您推薦 {len(recommendations)} 個沿途景點:")
         print("-"*60)
         
         for i, rec in enumerate(recommendations, 1):
@@ -88,7 +88,7 @@ def example_real_time_recommendation():
                 print(f"     • {reason}")
         
         print("\n" + "="*60)
-        print("✓ 推薦完成!")
+        print(" 推薦完成!")
         
     except Exception as e:
         print(f"推薦過程發生錯誤: {e}")
@@ -230,7 +230,7 @@ def example_route_planning():
         
         # 判斷是否合理
         is_reasonable = detour['detour_ratio'] <= 1.3 and detour['extra_duration'] <= 1800
-        status = "✓ 合理繞道" if is_reasonable else "✗ 繞道過遠"
+        status = " 合理繞道" if is_reasonable else " 繞道過遠"
         print(f"  評估: {status}")
 
 
@@ -312,9 +312,9 @@ def main():
         try:
             print(f"正在運行範例 {i}/{len(examples)}: {name}")
             func()
-            print(f"\n✓ 範例 {i} 完成!")
+            print(f"\n 範例 {i} 完成!")
         except Exception as e:
-            print(f"\n✗ 範例 {i} 失敗: {e}")
+            print(f"\n 範例 {i} 失敗: {e}")
             import traceback
             traceback.print_exc()
         

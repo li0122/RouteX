@@ -111,9 +111,9 @@ def main():
     # 打印總結
     print_header("訓練總結")
     if exit_code == 0:
-        print("✓ 訓練成功完成！")
+        print(" 訓練成功完成！")
     else:
-        print("✗ 訓練失敗")
+        print(" 訓練失敗")
     print(f"\n總耗時: {hours}小時 {minutes}分鐘 {seconds}秒")
     print(f"結束時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*60)

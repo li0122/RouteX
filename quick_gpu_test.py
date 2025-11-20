@@ -16,7 +16,7 @@ def check_gpu_basic():
     print(f"CUDA可用: {torch.cuda.is_available()}")
     
     if not torch.cuda.is_available():
-        print("❌ CUDA不可用，請檢查CUDA安裝")
+        print(" CUDA不可用，請檢查CUDA安裝")
         return False
     
     print(f"CUDA版本: {torch.version.cuda}")
@@ -41,7 +41,7 @@ def test_gpu_basic_ops():
         # 測試1: 簡單張量創建
         print("測試1: 張量創建...")
         a = torch.randn(1000, 1000, device=device)
-        print("  ✓ 張量創建成功")
+        print("   張量創建成功")
         
         # 測試2: 矩陣乘法
         print("測試2: 矩陣乘法...")
@@ -49,13 +49,13 @@ def test_gpu_basic_ops():
         c = torch.matmul(a, a)
         torch.cuda.synchronize()  # 確保GPU操作完成
         elapsed = time.time() - start_time
-        print(f"  ✓ 矩陣乘法成功 (耗時: {elapsed:.3f}秒)")
+        print(f"   矩陣乘法成功 (耗時: {elapsed:.3f}秒)")
         
         # 測試3: 布爾運算
         print("測試3: 布爾運算...")
         mask = a > 0
         result = torch.sum(mask, dim=1)
-        print("  ✓ 布爾運算成功")
+        print("   布爾運算成功")
         
         # 測試4: 記憶體管理
         print("測試4: 記憶體管理...")
@@ -63,12 +63,12 @@ def test_gpu_basic_ops():
         del a, c, mask, result
         torch.cuda.empty_cache()
         print(f"  清理後: {torch.cuda.memory_allocated()/1024**2:.1f} MB")
-        print("  ✓ 記憶體管理成功")
+        print("   記憶體管理成功")
         
         return True
         
     except Exception as e:
-        print(f"❌ GPU運算失敗: {e}")
+        print(f" GPU運算失敗: {e}")
         return False
 
 def test_gpu_large_matrix():
@@ -103,7 +103,7 @@ def test_gpu_large_matrix():
         torch.cuda.synchronize()
         elapsed = time.time() - start_time
         
-        print(f"  ✓ 計算完成 (耗時: {elapsed:.3f}秒)")
+        print(f"   計算完成 (耗時: {elapsed:.3f}秒)")
         print(f"  平均可用POI數: {available_counts.float().mean().item():.1f}")
         
         # 清理
@@ -113,11 +113,11 @@ def test_gpu_large_matrix():
         return True
         
     except torch.cuda.OutOfMemoryError:
-        print("❌ GPU記憶體不足")
+        print(" GPU記憶體不足")
         torch.cuda.empty_cache()
         return False
     except Exception as e:
-        print(f"❌ 大型矩陣測試失敗: {e}")
+        print(f" 大型矩陣測試失敗: {e}")
         torch.cuda.empty_cache()
         return False
 
@@ -170,19 +170,19 @@ def main():
     
     # 基本運算測試
     if not test_gpu_basic_ops():
-        print("❌ 基本GPU運算失敗，請檢查CUDA安裝")
+        print(" 基本GPU運算失敗，請檢查CUDA安裝")
         return
     
     # 大型矩陣測試
     if not test_gpu_large_matrix():
-        print("❌ 大型矩陣測試失敗，可能是記憶體不足")
+        print(" 大型矩陣測試失敗，可能是記憶體不足")
         return
     
     # 性能測試
     test_gpu_performance()
     
     print("\n" + "=" * 50)
-    print("✓ GPU診斷完成！GPU功能正常")
+    print(" GPU診斷完成！GPU功能正常")
     print("現在可以嘗試完整的GPU加速測試")
 
 if __name__ == "__main__":

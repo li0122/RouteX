@@ -179,7 +179,7 @@ class ModelEvaluator:
         
     def load_model(self):
         """載入訓練好的模型"""
-        print(f"📦 載入模型: {self.model_path}")
+        print(f" 載入模型: {self.model_path}")
         
         try:
             # 載入 checkpoint
@@ -211,10 +211,10 @@ class ModelEvaluator:
             # 載入權重
             if 'model_state_dict' in checkpoint:
                 self.model.load_state_dict(checkpoint['model_state_dict'])
-                print(f"✓ 模型權重載入成功")
+                print(f" 模型權重載入成功")
             else:
                 self.model.load_state_dict(checkpoint)
-                print(f"✓ 模型權重載入成功")
+                print(f" 模型權重載入成功")
             
             self.model.to(self.device)
             self.model.eval()
@@ -231,7 +231,7 @@ class ModelEvaluator:
             return True
             
         except Exception as e:
-            print(f"❌ 模型載入失敗: {e}")
+            print(f" 模型載入失敗: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -247,13 +247,13 @@ class ModelEvaluator:
             測試樣本列表
         """
         if test_data_path and Path(test_data_path).exists():
-            print(f"📂 載入測試數據: {test_data_path}")
+            print(f" 載入測試數據: {test_data_path}")
             with open(test_data_path, 'r', encoding='utf-8') as f:
                 test_data = json.load(f)
-            print(f"✓ 載入 {len(test_data)} 個測試樣本")
+            print(f" 載入 {len(test_data)} 個測試樣本")
             return test_data
         else:
-            print("⚠️ 未提供測試數據，生成模擬數據...")
+            print("️ 未提供測試數據，生成模擬數據...")
             return self._generate_mock_test_data()
     
     def _generate_mock_test_data(self, num_users: int = 50) -> List[Dict]:
@@ -277,7 +277,7 @@ class ModelEvaluator:
             }
             test_data.append(sample)
         
-        print(f"✓ 生成 {len(test_data)} 個模擬測試樣本")
+        print(f" 生成 {len(test_data)} 個模擬測試樣本")
         return test_data
     
     def evaluate(
@@ -297,7 +297,7 @@ class ModelEvaluator:
         Returns:
             評估結果字典
         """
-        print(f"\n🎯 開始評估模型...")
+        print(f"\n 開始評估模型...")
         print(f"   測試樣本數: {len(test_data)}")
         print(f"   評估指標: NDCG@k, Recall@k, Precision@k, Hit Rate@k, MRR, MAP")
         print(f"   k 值: {k_values}")
@@ -314,15 +314,15 @@ class ModelEvaluator:
         
         # 載入推薦器（如果需要）
         if self.recommender is None:
-            print("\n📦 初始化推薦器...")
+            print("\n 初始化推薦器...")
             try:
                 self.recommender = create_route_aware_recommender(
                     model_checkpoint=self.model_path,
                     device=str(self.device)
                 )
             except Exception as e:
-                print(f"⚠️ 推薦器初始化失敗: {e}")
-                print("⚠️ 將使用簡化評估模式（僅模型推理）")
+                print(f"️ 推薦器初始化失敗: {e}")
+                print("️ 將使用簡化評估模式（僅模型推理）")
         
         # 對每個測試樣本進行評估
         for idx, sample in enumerate(test_data):
@@ -373,7 +373,7 @@ class ModelEvaluator:
                 )
                 
             except Exception as e:
-                print(f"⚠️ 樣本 {idx} 評估失敗: {e}")
+                print(f"️ 樣本 {idx} 評估失敗: {e}")
                 continue
         
         # 計算平均值
@@ -392,28 +392,28 @@ class ModelEvaluator:
     def print_results(self, results: Dict):
         """打印評估結果"""
         print("\n" + "="*60)
-        print("📊 評估結果")
+        print(" 評估結果")
         print("="*60)
         
         print(f"\n樣本數: {results['num_samples']}")
         
-        print(f"\n📈 NDCG (Normalized Discounted Cumulative Gain):")
+        print(f"\n NDCG (Normalized Discounted Cumulative Gain):")
         for k, score in results['ndcg'].items():
             print(f"   NDCG@{k:2d}: {score:.4f}")
         
-        print(f"\n📈 Recall:")
+        print(f"\n Recall:")
         for k, score in results['recall'].items():
             print(f"   Recall@{k:2d}: {score:.4f}")
         
-        print(f"\n📈 Precision:")
+        print(f"\n Precision:")
         for k, score in results['precision'].items():
             print(f"   Precision@{k:2d}: {score:.4f}")
         
-        print(f"\n📈 Hit Rate:")
+        print(f"\n Hit Rate:")
         for k, score in results['hit_rate'].items():
             print(f"   Hit Rate@{k:2d}: {score:.4f}")
         
-        print(f"\n📈 其他指標:")
+        print(f"\n 其他指標:")
         print(f"   MRR (Mean Reciprocal Rank): {results['mrr']:.4f}")
         print(f"   MAP (Mean Average Precision): {results['map']:.4f}")
         
@@ -423,7 +423,7 @@ class ModelEvaluator:
         """保存評估結果"""
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
-        print(f"\n💾 評估結果已保存至: {output_path}")
+        print(f"\n 評估結果已保存至: {output_path}")
 
 
 def main():
@@ -448,7 +448,7 @@ def main():
     args = parser.parse_args()
     
     print("="*60)
-    print("🎯 Travel DLRM 模型評估")
+    print(" Travel DLRM 模型評估")
     print("="*60)
     
     # 創建評估器
@@ -459,7 +459,7 @@ def main():
     
     # 載入模型
     if not evaluator.load_model():
-        print("❌ 模型載入失敗，退出評估")
+        print(" 模型載入失敗，退出評估")
         return
     
     # 載入測試數據
@@ -478,7 +478,7 @@ def main():
     # 保存結果
     evaluator.save_results(results, args.output)
     
-    print("\n✅ 評估完成!")
+    print("\n 評估完成!")
 
 
 if __name__ == "__main__":

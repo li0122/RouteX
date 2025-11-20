@@ -31,7 +31,7 @@ class OptimizedRouteRecommender:
         self.spatial_index = self._build_spatial_index()
         self.osrm_client = AsyncOSRMClient()
         
-        print("✅ 優化版推薦器初始化完成")
+        print(" 優化版推薦器初始化完成")
         print(f"   - 空間索引: {len(self.spatial_index)} POI")
         print(f"   - 異步OSRM客戶端已就緒")
     
@@ -55,7 +55,7 @@ class OptimizedRouteRecommender:
             # 構建KD樹
             tree = cKDTree(np.array(coordinates))
             
-            print(f"✅ 空間索引構建完成: {len(coordinates)} POI")
+            print(f" 空間索引構建完成: {len(coordinates)} POI")
             return {
                 'tree': tree,
                 'coordinates': coordinates,
@@ -63,7 +63,7 @@ class OptimizedRouteRecommender:
             }
             
         except ImportError:
-            print("⚠️ scipy未安裝，使用線性搜索")
+            print("️ scipy未安裝，使用線性搜索")
             return None
     
     async def recommend_on_route_optimized(
@@ -86,7 +86,7 @@ class OptimizedRouteRecommender:
         start_time = time.time()
         
         # 1. 空間索引搜索候選POI - O(log P + k)
-        print("🔍 步驟1: 空間索引搜索候選POI...")
+        print(" 步驟1: 空間索引搜索候選POI...")
         search_start = time.time()
         
         candidate_pois = self._spatial_search_candidates(
@@ -100,7 +100,7 @@ class OptimizedRouteRecommender:
             return []
         
         # 2. 智能預過濾 - O(C)
-        print("⚡ 步驟2: 智能預過濾...")
+        print(" 步驟2: 智能預過濾...")
         filter_start = time.time()
         
         filtered_pois = self._intelligent_prefilter(
@@ -111,7 +111,7 @@ class OptimizedRouteRecommender:
         print(f"   過濾後POI: {len(filtered_pois)} (耗時: {filter_time:.3f}s)")
         
         # 3. 異步批量OSRM查詢 - O(C×R/n) 其中n為並行度
-        print("🚀 步驟3: 異步批量路線查詢...")
+        print(" 步驟3: 異步批量路線查詢...")
         osrm_start = time.time()
         
         route_results = await self.osrm_client.batch_detour_calculation(
@@ -127,7 +127,7 @@ class OptimizedRouteRecommender:
             return []
         
         # 4. 批量模型推理 - O(C×M)
-        print("🧠 步驟4: 批量模型推理...")
+        print(" 步驟4: 批量模型推理...")
         inference_start = time.time()
         
         scores = self._batch_model_inference(
@@ -139,7 +139,7 @@ class OptimizedRouteRecommender:
         print(f"   模型推理完成 (耗時: {inference_time:.3f}s)")
         
         # 5. 排序和結果生成 - O(C log C)
-        print("📋 步驟5: 生成推薦結果...")
+        print(" 步驟5: 生成推薦結果...")
         
         # 組合結果
         recommendations = []
@@ -157,7 +157,7 @@ class OptimizedRouteRecommender:
         recommendations.sort(key=lambda x: x['score'], reverse=True)
         
         total_time = time.time() - start_time
-        print(f"\n✅ 推薦完成! 總耗時: {total_time:.3f}s")
+        print(f"\n 推薦完成! 總耗時: {total_time:.3f}s")
         print(f"   性能分解:")
         print(f"     - 空間搜索: {search_time:.3f}s ({search_time/total_time*100:.1f}%)")
         print(f"     - 智能過濾: {filter_time:.3f}s ({filter_time/total_time*100:.1f}%)")
@@ -296,10 +296,10 @@ class OptimizedRouteRecommender:
             reasons.append(f"⭐ 高評分景點 ({poi['avg_rating']:.1f}/5.0)")
         
         if route_result['extra_duration'] / 60.0 < 10:
-            reasons.append(f"🚗 幾乎不繞路 (僅需額外 {route_result['extra_duration']/60:.0f} 分鐘)")
+            reasons.append(f" 幾乎不繞路 (僅需額外 {route_result['extra_duration']/60:.0f} 分鐘)")
         
         if poi.get('num_reviews', 0) > 100:
-            reasons.append(f"🔥 熱門景點 ({poi['num_reviews']} 條評論)")
+            reasons.append(f" 熱門景點 ({poi['num_reviews']} 條評論)")
         
         return reasons[:3]
     
@@ -463,7 +463,7 @@ class AsyncOSRMClient:
 async def performance_comparison():
     """性能對比測試"""
     
-    print("🔄 性能對比測試")
+    print(" 性能對比測試")
     print("="*50)
     
     # 模擬數據
@@ -479,7 +479,7 @@ async def performance_comparison():
     test_cases = [50, 100, 200]
     
     for candidate_count in test_cases:
-        print(f"\n📊 測試規模: {candidate_count} 候選POI")
+        print(f"\n 測試規模: {candidate_count} 候選POI")
         print("-"*30)
         
         # 模擬候選POI
@@ -523,10 +523,10 @@ async def performance_comparison():
 
 
 if __name__ == "__main__":
-    print("🚀 運行性能優化對比測試...")
+    print(" 運行性能優化對比測試...")
     asyncio.run(performance_comparison())
     
-    print("\n📈 優化效果總結:")
+    print("\n 優化效果總結:")
     print("1. 空間索引: POI搜索從O(n)降到O(log n)")
     print("2. 異步查詢: OSRM延遲降低80-90%")
     print("3. 智能過濾: 減少50-70%無效計算")

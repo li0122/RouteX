@@ -52,14 +52,14 @@ class LeafletMapPicker {
         
         // 添加瓦片層（支援離線 MBTiles 或在線 OSM）
         if (this.options.useMBTiles && typeof L.tileLayer.mbTiles !== 'undefined') {
-            console.log('🗺️ 使用離線 MBTiles 瓦片');
+            console.log('️ 使用離線 MBTiles 瓦片');
             L.tileLayer.mbTiles(this.options.mbtilesPath, {
                 attribution: '© OpenStreetMap contributors (離線)',
                 minZoom: this.options.minZoom,
                 maxZoom: this.options.maxZoom
             }).addTo(this.map);
         } else {
-            console.log('🌐 使用在線 OSM 瓦片');
+            console.log(' 使用在線 OSM 瓦片');
             L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors',
                 maxZoom: 19
@@ -72,17 +72,17 @@ class LeafletMapPicker {
         // 監聽地圖點擊
         this.map.on('click', (e) => this.handleMapClick(e));
         
-        console.log('✅ Leaflet 地圖選擇器初始化完成');
+        console.log(' Leaflet 地圖選擇器初始化完成');
     }
     
     addLandmarks() {
         const landmarks = [
-            { name: '金門大橋', lat: 37.8199, lng: -122.4783, icon: '🌉' },
-            { name: '漁人碼頭', lat: 37.8080, lng: -122.4177, icon: '🎣' },
-            { name: '聯合廣場', lat: 37.7880, lng: -122.4075, icon: '🏛️' },
-            { name: '惡魔島', lat: 37.8267, lng: -122.4230, icon: '🏝️' },
-            { name: '金門公園', lat: 37.7694, lng: -122.4862, icon: '🌳' },
-            { name: '九曲花街', lat: 37.8021, lng: -122.4187, icon: '🌸' }
+            { name: '金門大橋', lat: 37.8199, lng: -122.4783, icon: '' },
+            { name: '漁人碼頭', lat: 37.8080, lng: -122.4177, icon: '' },
+            { name: '聯合廣場', lat: 37.7880, lng: -122.4075, icon: '️' },
+            { name: '惡魔島', lat: 37.8267, lng: -122.4230, icon: '️' },
+            { name: '金門公園', lat: 37.7694, lng: -122.4862, icon: '' },
+            { name: '九曲花街', lat: 37.8021, lng: -122.4187, icon: '' }
         ];
         
         landmarks.forEach(landmark => {
@@ -222,7 +222,7 @@ class LeafletMapPicker {
         
         this.startMarker.bindPopup(`
             <div style="text-align: center;">
-                <div style="font-size: 24px; margin-bottom: 5px;">🟢</div>
+                <div style="font-size: 24px; margin-bottom: 5px;"></div>
                 <strong>出發點</strong><br>
                 <small>${lat.toFixed(6)}, ${lng.toFixed(6)}</small>
             </div>
@@ -241,7 +241,7 @@ class LeafletMapPicker {
         // 更新路線
         this.updateRouteLine();
         
-        console.log('✅ 出發點已設定:', lat, lng);
+        console.log(' 出發點已設定:', lat, lng);
     }
     
     setEndLocation(lat, lng) {
@@ -266,7 +266,7 @@ class LeafletMapPicker {
         
         this.endMarker.bindPopup(`
             <div style="text-align: center;">
-                <div style="font-size: 24px; margin-bottom: 5px;">🔴</div>
+                <div style="font-size: 24px; margin-bottom: 5px;"></div>
                 <strong>目的地</strong><br>
                 <small>${lat.toFixed(6)}, ${lng.toFixed(6)}</small>
             </div>
@@ -285,7 +285,7 @@ class LeafletMapPicker {
         // 更新路線
         this.updateRouteLine();
         
-        console.log('✅ 目的地已設定:', lat, lng);
+        console.log(' 目的地已設定:', lat, lng);
     }
     
     updateRouteLine() {
@@ -315,7 +315,7 @@ class LeafletMapPicker {
             
             // 計算距離
             const distance = this.map.distance(this.startLocation, this.endLocation) / 1000;
-            console.log(`📏 直線距離: ${distance.toFixed(2)} km`);
+            console.log(` 直線距離: ${distance.toFixed(2)} km`);
         }
     }
 }
