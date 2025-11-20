@@ -286,18 +286,37 @@ def get_categories():
 
 
 @app.route('/api/itinerary', methods=['POST'])
-def recommend_itinerary():
+def recommend_itinerary_api():
     """
-    推薦完整旅遊行程 API（新功能）
+    推薦完整旅遊行程 API（優化版）
+    
+    返回格式：單一行程卡片（包含所有景點的完整路線）
     
     請求格式: {
         "start": [lat, lng],
         "end": [lat, lng],
         "activity_intent": "旅遊探索",
         "time_budget": 240,  // 可選，分鐘
-        "top_k": 20,  // 可選
+        "top_k": 20,  // 可選，DLRM候選數量
         "user_id": "user_123",  // 可選
         "user_history": []  // 可選
+    }
+    
+    返回: {
+        "success": true,
+        "type": "itinerary",  // 標記為行程類型
+        "itinerary": {
+            "stops": [...],  // 所有景點（已優化順序）
+            "total_duration": 240,
+            "total_distance": 150.5,
+            "summary": "...",
+            "tips": [...],
+            "route": {
+                "start": [lat, lng],
+                "end": [lat, lng],
+                "waypoints": [...]  // 中途所有景點
+            }
+        }
     }
     """
     try:
@@ -318,7 +337,15 @@ def recommend_itinerary():
         if not recommender:
             return jsonify({'error': '推薦系統未初始化'}), 500
         
-        # 呼叫行程推薦
+        print(f"\n🗺️ 行程推薦請求:")
+        print(f"   起點: {start}")
+        print(f"   終點: {end}")
+        print(f"   活動: {activity_intent}")
+        
+        # 呼叫行程推薦（含路徑優化）
+        import time
+        start_time = time.time()
+        
         result = recommender.recommend_itinerary(
             user_id=user_id,
             user_history=user_history,
@@ -329,39 +356,60 @@ def recommend_itinerary():
             time_budget=time_budget
         )
         
-        # 格式化回應
-        formatted_itinerary = []
+        elapsed = time.time() - start_time
+        print(f"✅ 行程生成完成，耗時 {elapsed:.1f}s")
+        
+        # 格式化為單一行程卡片
+        stops = []
+        waypoints = []
+        
         for item in result.get('itinerary', []):
             poi = item['poi']
-            formatted_itinerary.append({
-                'order': item['order'],
-                'poi': {
-                    'name': poi.get('name', 'Unknown'),
-                    'category': poi.get('primary_category', poi.get('category', 'N/A')),
-                    'latitude': poi.get('latitude'),
-                    'longitude': poi.get('longitude'),
-                    'rating': poi.get('avg_rating'),
-                    'address': poi.get('address', ''),
-                    'price_level': poi.get('price_level')
-                },
+            
+            stop = {
+                'order': item.get('order', 0),
+                'name': poi.get('name', 'Unknown'),
+                'category': poi.get('primary_category', poi.get('category', 'N/A')),
+                'latitude': poi.get('latitude'),
+                'longitude': poi.get('longitude'),
+                'rating': poi.get('avg_rating', 0),
+                'reviews': poi.get('num_reviews', 0),
+                'address': poi.get('address', ''),
+                'price_level': poi.get('price_level'),
                 'reason': item.get('reason', ''),
-                'estimated_duration': item.get('estimated_duration', 60),
-                'score': poi.get('score', 0)
-            })
+                'duration': item.get('estimated_duration', 60)
+            }
+            
+            stops.append(stop)
+            waypoints.append([poi.get('latitude'), poi.get('longitude')])
         
-        return jsonify({
+        # 構建單一行程卡片響應
+        itinerary_card = {
             'success': True,
-            'itinerary': formatted_itinerary,
-            'total_duration': result.get('total_duration', 0),
-            'total_distance': result.get('total_distance', 0),
-            'summary': result.get('summary', ''),
-            'tips': result.get('tips', []),
-            'start': list(start),
-            'end': list(end)
-        })
+            'type': 'itinerary',  # 標記類型
+            'itinerary': {
+                'title': f"{activity_intent}行程",
+                'stops': stops,
+                'total_stops': len(stops),
+                'total_duration': result.get('total_duration', 0),
+                'total_distance': result.get('total_distance', 0),
+                'summary': result.get('summary', ''),
+                'tips': result.get('tips', []),
+                'route': {
+                    'start': list(start),
+                    'end': list(end),
+                    'waypoints': waypoints,
+                    'optimized': result.get('path_optimized', True)
+                }
+            },
+            'processing_time': elapsed
+        }
+        
+        print(f"📦 返回行程: {len(stops)} 個景點")
+        return jsonify(itinerary_card)
         
     except Exception as e:
-        print(f"行程推薦錯誤: {e}")
+        print(f"❌ 行程推薦錯誤: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500

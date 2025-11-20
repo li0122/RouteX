@@ -1065,20 +1065,30 @@ class RouteAwareRecommender:
         reranked = self._rerank_by_detour_cost(recommendations)
         print(f"✓ Reranking 完成")
         
+        # 步驟 2.5: 優化訪問順序（最短路徑）
+        print(f"\n🗺️ 步驟2.5: 優化訪問順序...")
+        optimized = self._optimize_visit_order(reranked[:15], start_location, end_location)
+        print(f"✓ 路徑優化完成")
+        
         # 步驟 3: 使用 LLM 組合成行程
         print(f"\n🤖 步驟3: LLM 組合旅遊行程...")
         
         if not self.llm_filter:
             print("⚠️ LLM 不可用，使用備用行程生成")
-            itinerary_result = self._fallback_itinerary_generation(reranked[:10])
+            itinerary_result = self._fallback_itinerary_generation(optimized[:10])
         else:
             itinerary_result = self.llm_filter.generate_itinerary(
-                pois=reranked[:15],  # 傳遞前 15 個給 LLM 選擇
+                pois=optimized[:15],  # 傳遞優化順序後的POI給LLM
                 start_location=start_location,
                 end_location=end_location,
                 activity_intent=activityIntent,
                 time_budget=time_budget
             )
+        
+        # 添加路徑優化標記
+        itinerary_result['path_optimized'] = True
+        itinerary_result['start_location'] = start_location
+        itinerary_result['end_location'] = end_location
         
         total_time = time.time() - start_time
         
@@ -1135,6 +1145,69 @@ class RouteAwareRecommender:
         reranked.sort(key=lambda x: x['combined_score'], reverse=True)
         
         return reranked
+    
+    def _optimize_visit_order(
+        self,
+        recommendations: List[Dict],
+        start_location: Tuple[float, float],
+        end_location: Tuple[float, float]
+    ) -> List[Dict]:
+        """
+        優化POI訪問順序（最短路徑）
+        使用貪婪最近鄰算法
+        
+        Args:
+            recommendations: 推薦列表
+            start_location: 起點
+            end_location: 終點
+        
+        Returns:
+            優化順序後的推薦列表
+        """
+        if len(recommendations) <= 1:
+            return recommendations
+        
+        # 提取POI位置
+        unvisited = list(recommendations)
+        ordered = []
+        current_location = start_location
+        
+        # 貪婪最近鄰：每次選擇離當前位置最近的POI
+        while unvisited:
+            # 計算所有未訪問POI到當前位置的距離
+            distances = []
+            for rec in unvisited:
+                poi = rec.get('poi', {})
+                poi_location = (poi.get('latitude'), poi.get('longitude'))
+                dist = self._haversine_distance(
+                    current_location[0], current_location[1],
+                    poi_location[0], poi_location[1]
+                )
+                distances.append((dist, rec))
+            
+            # 選擇最近的POI
+            distances.sort(key=lambda x: x[0])
+            nearest_dist, nearest_rec = distances[0]
+            
+            # 添加到有序列表
+            ordered.append(nearest_rec)
+            unvisited.remove(nearest_rec)
+            
+            # 更新當前位置
+            poi = nearest_rec.get('poi', {})
+            current_location = (poi.get('latitude'), poi.get('longitude'))
+        
+        # 更新order編號
+        for idx, rec in enumerate(ordered, 1):
+            rec['optimized_order'] = idx
+        
+        print(f"   路徑優化: {len(ordered)} 個POI")
+        print(f"   起點 → ", end="")
+        for rec in ordered:
+            print(f"{rec.get('poi', {}).get('name', '?')[:10]}... → ", end="")
+        print("終點")
+        
+        return ordered
     
     def _fallback_itinerary_generation(self, pois: List[Dict]) -> Dict[str, Any]:
         """備用行程生成（LLM 不可用時）"""
