@@ -862,6 +862,11 @@ Now please evaluate:"""
                     poi = pois[poi_idx]
                     duration = item.get('estimated_duration_minutes', 60)
                     
+                    # 調試：確認 POI 有座標
+                    if 'latitude' not in poi or 'longitude' not in poi:
+                        print(f"⚠️ LLM選中的POI缺少座標: {poi.get('name', 'Unknown')}")
+                        print(f"   POI keys: {list(poi.keys())}")
+                    
                     itinerary.append({
                         'order': item.get('order', len(itinerary) + 1),
                         'poi': poi,
