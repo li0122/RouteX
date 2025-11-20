@@ -518,6 +518,9 @@ function initMap(data) {
         map = new LeafletResultMap('map');
     }
     
+    // 保存到全局變量供卡片點擊使用
+    window.map = map;
+    
     // 設置數據並繪製
     map.setData(data);
 }
@@ -608,10 +611,31 @@ function createRecommendationCard(rec, rank) {
         </div>
     `;
     
+    // 添加點擊卡片顯示路徑功能
+    card.addEventListener('click', function(e) {
+        // 如果點擊的是座標區域，則執行複製而不顯示路徑
+        if (e.target.closest('.coord-value')) {
+            return;
+        }
+        
+        // 顯示該 POI 的路徑
+        if (window.map && typeof window.map.showSinglePOIRoute === 'function') {
+            window.map.showSinglePOIRoute(rank - 1);
+            
+            // 高亮當前卡片
+            document.querySelectorAll('.recommendation-card').forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+        }
+    });
+    
+    card.style.cursor = 'pointer';
+    
     // 添加點擊複製座標功能
     const coordValue = card.querySelector('.coord-value');
     if (coordValue) {
-        coordValue.addEventListener('click', function() {
+        coordValue.style.cursor = 'pointer';
+        coordValue.addEventListener('click', function(e) {
+            e.stopPropagation(); // 阻止事件冒泡到卡片
             const coordText = `${poi.latitude}, ${poi.longitude}`;
             navigator.clipboard.writeText(coordText).then(() => {
                 // 顯示複製成功提示

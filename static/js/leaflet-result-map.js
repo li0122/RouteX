@@ -175,23 +175,120 @@ class LeafletResultMap {
     }
     
     drawSimpleRoute(start, recommendations, end) {
-        const points = [
-            start,
-            ...recommendations.map(r => [r.poi.latitude, r.poi.longitude]),
-            end
-        ];
+        // 單點推薦模式：不自動繪製路徑，等待用戶點擊
+        console.log('📍 單點推薦模式：路徑隱藏，點擊卡片顯示');
+    }
+    
+    async showSinglePOIRoute(poiIndex) {
+        // 清除之前的路線
+        if (this.currentRoute) {
+            this.map.removeLayer(this.currentRoute);
+            this.currentRoute = null;
+        }
         
-        this.routeLine = L.polyline(points, {
-            color: '#9ca3af',
-            weight: 3,
-            opacity: 0.5,
-            dashArray: '10, 10'
-        }).addTo(this.map);
+        if (this.currentRouteInfo) {
+            this.map.removeLayer(this.currentRouteInfo);
+            this.currentRouteInfo = null;
+        }
         
-        console.log('📍 繪製簡單路線');
+        // 高亮選中的 POI marker
+        this.highlightPOIMarker(poiIndex);
+        
+        const poi = this.pois[poiIndex];
+        const poiLocation = [poi.poi.latitude, poi.poi.longitude];
+        
+        // 請求 OSRM 路線：起點 → POI → 終點
+        try {
+            console.log(`🚗 請求 POI ${poiIndex + 1} 的路線...`);
+            
+            const waypoints = [this.startLocation, poiLocation, this.endLocation];
+            
+            const response = await fetch('/api/route', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    waypoints: waypoints,
+                    options: { geometries: 'geojson', overview: 'full' }
+                }),
+                signal: AbortSignal.timeout(10000)
+            });
+            
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const data = await response.json();
+            
+            if (data.code === 'Ok' && data.route && data.route.geometry) {
+                const route = data.route;
+                const coordinates = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                
+                // 繪製路線
+                this.currentRoute = L.polyline(coordinates, {
+                    color: '#3b82f6',
+                    weight: 5,
+                    opacity: 0.9,
+                    lineJoin: 'round',
+                    lineCap: 'round'
+                }).addTo(this.map);
+                
+                // 添加路線資訊
+                const distance = (route.distance / 1000).toFixed(1);
+                const duration = Math.round(route.duration / 60);
+                
+                const midPoint = coordinates[Math.floor(coordinates.length / 2)];
+                this.currentRouteInfo = L.popup({
+                    closeButton: false,
+                    autoClose: false,
+                    closeOnClick: false,
+                    className: 'route-info-popup'
+                })
+                .setLatLng(midPoint)
+                .setContent(`
+                    <div style="text-align: center; padding: 8px;">
+                        <strong>${poi.poi.name}</strong><br>
+                        <span style="color: #3b82f6;">📍 ${distance} km | ⏱️ ${duration} 分鐘</span>
+                    </div>
+                `)
+                .addTo(this.map);
+                
+                // 調整視圖以顯示完整路線
+                this.map.fitBounds(this.currentRoute.getBounds(), { padding: [50, 50] });
+                
+                console.log(`✅ POI ${poiIndex + 1} 路線繪製完成`);
+            }
+        } catch (error) {
+            console.error('路線請求失敗:', error);
+        }
+    }
+    
+    highlightPOIMarker(poiIndex) {
+        // 重置所有 POI marker 樣式
+        this.pois.forEach((_, idx) => {
+            const marker = this.markers[idx + 2]; // 前兩個是起點和終點
+            if (marker && marker._icon) {
+                const markerDiv = marker._icon.querySelector('.poi-marker');
+                if (markerDiv) {
+                    markerDiv.style.background = '#3b82f6';
+                    markerDiv.style.transform = 'scale(1)';
+                }
+            }
+        });
+        
+        // 高亮選中的 marker
+        const selectedMarker = this.markers[poiIndex + 2];
+        if (selectedMarker && selectedMarker._icon) {
+            const markerDiv = selectedMarker._icon.querySelector('.poi-marker');
+            if (markerDiv) {
+                markerDiv.style.background = '#f59e0b';
+                markerDiv.style.transform = 'scale(1.2)';
+            }
+        }
     }
     
     async fetchAndDrawOSRM(start, recommendations, end) {
+        // 單點推薦模式：不自動繪製完整路線
+        console.log('⏸️ 單點推薦模式：跳過自動路線繪製');
+        return;
+        
         try {
             console.log('🚗 開始請求 OSRM 路線...');
             

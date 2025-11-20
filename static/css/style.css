@@ -240,6 +240,12 @@ body {
     border-color: var(--primary-color);
 }
 
+.recommendation-card.active {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+    transform: translateY(-5px);
+}
+
 .card-header {
     display: flex;
     justify-content: space-between;
@@ -688,6 +694,23 @@ body {
     margin: 5px 0;
     font-size: 13px;
     color: var(--dark-color);
+}
+
+/* 路徑信息彈窗樣式 */
+.route-info-popup .leaflet-popup-content-wrapper {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+}
+
+.route-info-popup .leaflet-popup-content {
+    margin: 10px 14px;
+    font-size: 14px;
+}
+
+.route-info-popup .leaflet-popup-tip {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
 }
 
 .landmark-marker {
