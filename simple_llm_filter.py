@@ -779,19 +779,22 @@ Now please evaluate:"""
         
         # POI 信息
         poi_info = []
-        for idx, poi in enumerate(pois, 1):
+        for idx, rec in enumerate(pois, 1):
+            # 提取內部 POI 對象
+            poi = rec.get('poi', rec)  # 兼容嵌套和非嵌套結構
+            
             info = f"{idx}. {poi.get('name', 'Unknown')}"
             info += f" ({poi.get('primary_category', poi.get('category', 'N/A'))})"
             
             if 'avg_rating' in poi:
                 info += f" - 評分: {poi['avg_rating']:.1f}⭐"
             
-            if 'detour_info' in poi and poi['detour_info']:
-                extra_time = poi['detour_info'].get('extra_duration', 0) / 60.0
+            if 'detour_info' in rec and rec['detour_info']:
+                extra_time = rec['detour_info'].get('extra_duration', 0) / 60.0
                 info += f" - 繞道: +{extra_time:.0f}分鐘"
             
-            if 'score' in poi:
-                info += f" - 推薦分數: {poi['score']:.2f}"
+            if 'score' in rec:
+                info += f" - 推薦分數: {rec['score']:.2f}"
             
             poi_info.append(info)
         
@@ -859,13 +862,16 @@ Now please evaluate:"""
                 poi_idx = item.get('poi_index', 0) - 1  # 轉為 0-based
                 
                 if 0 <= poi_idx < len(pois):
-                    poi = pois[poi_idx]
+                    rec = pois[poi_idx]
+                    # 提取內部 POI 對象
+                    poi = rec.get('poi', rec)  # 兼容嵌套和非嵌套結構
                     duration = item.get('estimated_duration_minutes', 60)
                     
                     # 調試：確認 POI 有座標
                     if 'latitude' not in poi or 'longitude' not in poi:
                         print(f"⚠️ LLM選中的POI缺少座標: {poi.get('name', 'Unknown')}")
-                        print(f"   POI keys: {list(poi.keys())}")
+                        print(f"   rec keys: {list(rec.keys())}")
+                        print(f"   poi keys: {list(poi.keys())}")
                     
                     itinerary.append({
                         'order': item.get('order', len(itinerary) + 1),
@@ -878,10 +884,16 @@ Now please evaluate:"""
             
             # 計算總距離（概估）
             total_distance = 0.0
-            for poi in itinerary:
-                if 'detour_info' in poi['poi'] and poi['poi']['detour_info']:
-                    extra_dist = poi['poi']['detour_info'].get('extra_distance', 0) / 1000.0
-                    total_distance += extra_dist
+            for item in itinerary:
+                poi = item['poi']
+                # 從原始推薦中查找 detour_info
+                for rec in pois:
+                    rec_poi = rec.get('poi', rec)
+                    if rec_poi.get('business_id') == poi.get('business_id'):
+                        if 'detour_info' in rec and rec['detour_info']:
+                            extra_dist = rec['detour_info'].get('extra_distance', 0) / 1000.0
+                            total_distance += extra_dist
+                        break
             
             return {
                 'itinerary': itinerary,
