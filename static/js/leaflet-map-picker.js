@@ -95,20 +95,48 @@ class LeafletMapPicker {
                 })
             }).addTo(this.map);
             
+            // 保存this引用
+            const self = this;
+            
             marker.bindPopup(`
                 <div style="text-align: center;">
                     <strong style="font-size: 16px;">${landmark.name}</strong><br>
                     <small style="color: #6b7280;">點擊地圖設定起終點</small><br>
-                    <button onclick="mapPicker.quickSetStart(${landmark.lat}, ${landmark.lng})" 
+                    <button class="quick-start-btn" data-lat="${landmark.lat}" data-lng="${landmark.lng}"
                             style="margin: 5px; padding: 5px 10px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer;">
                         設為起點
                     </button>
-                    <button onclick="mapPicker.quickSetEnd(${landmark.lat}, ${landmark.lng})"
+                    <button class="quick-end-btn" data-lat="${landmark.lat}" data-lng="${landmark.lng}"
                             style="margin: 5px; padding: 5px 10px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">
                         設為終點
                     </button>
                 </div>
             `);
+            
+            // 為按鈕添加事件監聽器
+            marker.on('popupopen', function() {
+                const popup = marker.getPopup();
+                const popupElement = popup.getElement();
+                
+                const startBtn = popupElement.querySelector('.quick-start-btn');
+                const endBtn = popupElement.querySelector('.quick-end-btn');
+                
+                if (startBtn) {
+                    startBtn.addEventListener('click', function() {
+                        const lat = parseFloat(this.dataset.lat);
+                        const lng = parseFloat(this.dataset.lng);
+                        self.quickSetStart(lat, lng);
+                    });
+                }
+                
+                if (endBtn) {
+                    endBtn.addEventListener('click', function() {
+                        const lat = parseFloat(this.dataset.lat);
+                        const lng = parseFloat(this.dataset.lng);
+                        self.quickSetEnd(lat, lng);
+                    });
+                }
+            });
         });
     }
     
