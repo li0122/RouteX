@@ -487,7 +487,7 @@ Now please evaluate:"""
         
         return prompt
     
-    def _call_llm(self, prompt: str) -> Optional[str]:
+    def _call_llm(self, prompt: str, temperature: float = 0.1, max_tokens: int = 500) -> Optional[str]:
         """調用LLM API"""
         try:
             url = f"{self.base_url}/v1/chat/completions"
@@ -500,8 +500,8 @@ Now please evaluate:"""
                         "content": prompt
                     }
                 ],
-                "temperature": 0.1,
-                "max_tokens": 500,  # 增加 token 數量以獲得詳細理由
+                "temperature": temperature,
+                "max_tokens": max_tokens,
                 "stream": False
             }
             
