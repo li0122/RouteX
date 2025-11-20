@@ -201,7 +201,6 @@ def recommend():
             'categories': categories,
             'activity_intent': activity_intent if activity_intent else None,
             'top_k': top_k,
-            'enable_llm': enable_llm,
             'count': len(recommendations),
             'recommendations': formatted_recs,
             'processing_time': elapsed
