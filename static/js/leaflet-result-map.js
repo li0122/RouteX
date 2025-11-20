@@ -244,8 +244,8 @@ class LeafletResultMap {
                 .setLatLng(midPoint)
                 .setContent(`
                     <div style="text-align: center; padding: 8px;">
-                        <strong>${poi.poi.name}</strong><br>
-                        <span style="color: #3b82f6;">📍 ${distance} km | ⏱️ ${duration} 分鐘</span>
+                        <strong style="font-size: 15px; color: white;">${poi.poi.name}</strong><br>
+                        <span style="color: white; font-size: 14px; font-weight: 600;">📍 ${distance} km | ⏱️ ${duration} 分鐘</span>
                     </div>
                 `)
                 .addTo(this.map);
