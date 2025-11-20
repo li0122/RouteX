@@ -25,6 +25,39 @@
                 </h2>
 
                 <form id="recommendForm">
+                    <!-- 推薦模式選擇 -->
+                    <div class="form-group">
+                        <label>
+                            <i class="fas fa-layer-group"></i> 推薦模式
+                        </label>
+                        <div class="mode-selector">
+                            <label class="mode-option" id="modeOptionPOI">
+                                <input type="radio" name="recommendMode" value="poi" checked>
+                                <div class="mode-card">
+                                    <div class="mode-icon">📍</div>
+                                    <div class="mode-title">單點推薦</div>
+                                    <div class="mode-desc">多個獨立景點，自由選擇</div>
+                                    <div class="mode-features">
+                                        <span class="feature-tag">快速</span>
+                                        <span class="feature-tag">5-10個景點</span>
+                                    </div>
+                                </div>
+                            </label>
+                            <label class="mode-option" id="modeOptionItinerary">
+                                <input type="radio" name="recommendMode" value="itinerary">
+                                <div class="mode-card">
+                                    <div class="mode-icon">🗺️</div>
+                                    <div class="mode-title">行程推薦</div>
+                                    <div class="mode-desc">完整行程規劃，路徑優化</div>
+                                    <div class="mode-features">
+                                        <span class="feature-tag">智能</span>
+                                        <span class="feature-tag">最短路徑</span>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
                     <!-- 活動需求輸入 -->
                     <div class="form-group">
                         <label>
@@ -79,7 +112,7 @@
                     </div>
 
                     <!-- 推薦數量 -->
-                    <div class="form-group">
+                    <div class="form-group" id="topKGroup">
                         <label for="topK">
                             <i class="fas fa-list-ol"></i> 推薦數量: <span id="topKValue">5</span>
                         </label>
@@ -92,10 +125,36 @@
                             value="5"
                             style="cursor: pointer;"
                         >
+                        <small class="mode-hint poi-hint" style="color: #6b7280; margin-top: 8px; display: block;">
+                            返回多個獨立景點卡片
+                        </small>
+                        <small class="mode-hint itinerary-hint" style="color: #6b7280; margin-top: 8px; display: none;">
+                            此為DLRM候選數量，最終行程包含3-5個景點
+                        </small>
                     </div>
 
-                    <!-- LLM過濾開關 -->
-                    <div class="settings-toggle">
+                    <!-- 時間預算（僅行程推薦） -->
+                    <div class="form-group" id="timeBudgetGroup" style="display: none;">
+                        <label for="timeBudget">
+                            <i class="fas fa-clock"></i> 時間預算: <span id="timeBudgetValue">240</span> 分鐘
+                        </label>
+                        <input 
+                            type="range" 
+                            id="timeBudget" 
+                            class="form-control" 
+                            min="60" 
+                            max="480" 
+                            step="30"
+                            value="240"
+                            style="cursor: pointer;"
+                        >
+                        <small style="color: #6b7280; margin-top: 8px; display: block;">
+                            AI會根據時間預算智能選擇景點數量
+                        </small>
+                    </div>
+
+                    <!-- LLM過濾開關（僅單點推薦顯示） -->
+                    <div class="settings-toggle" id="llmToggleGroup">
                         <label class="toggle-switch">
                             <span>
                                 <i class="fas fa-robot"></i> 啟用AI智能過濾
@@ -110,7 +169,7 @@
                     <!-- 提交按鈕 -->
                     <button type="submit" class="btn btn-primary" id="submitBtn">
                         <i class="fas fa-search"></i>
-                        開始推薦
+                        <span id="submitBtnText">開始推薦</span>
                     </button>
                 </form>
             </div>

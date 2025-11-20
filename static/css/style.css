@@ -717,3 +717,253 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* 推薦模式選擇器 */
+.mode-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.mode-option {
+    cursor: pointer;
+    position: relative;
+}
+
+.mode-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.mode-card {
+    padding: 20px;
+    border: 3px solid var(--border-color);
+    border-radius: 12px;
+    background: white;
+    transition: all 0.3s ease;
+    text-align: center;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mode-option:hover .mode-card {
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.mode-option input[type="radio"]:checked + .mode-card {
+    border-color: var(--primary-color);
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(124, 58, 237, 0.05));
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+.mode-icon {
+    font-size: 2.5rem;
+    margin-bottom: 5px;
+}
+
+.mode-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--dark-color);
+}
+
+.mode-desc {
+    font-size: 0.9rem;
+    color: #6b7280;
+    margin-bottom: 5px;
+}
+
+.mode-features {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.feature-tag {
+    padding: 4px 12px;
+    background: #e0e7ff;
+    color: #4338ca;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* 行程卡片樣式 */
+.itinerary-card {
+    background: white;
+    border-radius: 16px;
+    padding: 25px;
+    box-shadow: var(--shadow-lg);
+    margin-bottom: 20px;
+}
+
+.itinerary-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.itinerary-icon {
+    font-size: 2rem;
+}
+
+.itinerary-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--dark-color);
+    margin: 0;
+}
+
+.itinerary-meta {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f3f4f6;
+    border-radius: 10px;
+}
+
+.meta-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+    color: var(--dark-color);
+}
+
+.meta-item i {
+    color: var(--primary-color);
+}
+
+.itinerary-stops {
+    margin-bottom: 20px;
+}
+
+.stop-item {
+    display: flex;
+    gap: 15px;
+    padding: 15px;
+    margin-bottom: 12px;
+    background: #f9fafb;
+    border-left: 4px solid var(--primary-color);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.stop-item:hover {
+    background: #f3f4f6;
+    transform: translateX(5px);
+}
+
+.stop-order {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.stop-content {
+    flex: 1;
+}
+
+.stop-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--dark-color);
+    margin-bottom: 5px;
+}
+
+.stop-details {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin-bottom: 5px;
+}
+
+.stop-reason {
+    font-size: 0.9rem;
+    color: #374151;
+    font-style: italic;
+}
+
+.itinerary-summary {
+    padding: 15px;
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.itinerary-summary h4 {
+    margin: 0 0 10px 0;
+    color: #92400e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.itinerary-summary p {
+    margin: 0;
+    color: #78350f;
+    line-height: 1.6;
+}
+
+.itinerary-tips {
+    padding: 15px;
+    background: #dbeafe;
+    border-left: 4px solid #3b82f6;
+    border-radius: 8px;
+}
+
+.itinerary-tips h4 {
+    margin: 0 0 10px 0;
+    color: #1e40af;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.itinerary-tips ul {
+    margin: 0;
+    padding-left: 20px;
+    color: #1e3a8a;
+}
+
+.itinerary-tips li {
+    margin-bottom: 5px;
+    line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+    .mode-selector {
+        grid-template-columns: 1fr;
+    }
+    
+    .itinerary-meta {
+        gap: 10px;
+    }
+    
+    .stop-item {
+        flex-direction: column;
+    }
+}

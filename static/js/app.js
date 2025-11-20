@@ -11,11 +11,78 @@ let endLocation = null;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
+    initModeSelector();
     initCategorySelection();
     initTopKSlider();
+    initTimeBudgetSlider();
     initLeafletMapPicker();  // 使用 Leaflet
     initForm();
 });
+
+// 模式選擇器
+function initModeSelector() {
+    const modeOptions = document.querySelectorAll('input[name="recommendMode"]');
+    
+    modeOptions.forEach(option => {
+        option.addEventListener('change', function() {
+            updateUIForMode(this.value);
+        });
+    });
+    
+    // 初始化為單點推薦模式
+    updateUIForMode('poi');
+}
+
+function updateUIForMode(mode) {
+    const topKGroup = document.getElementById('topKGroup');
+    const timeBudgetGroup = document.getElementById('timeBudgetGroup');
+    const llmToggleGroup = document.getElementById('llmToggleGroup');
+    const submitBtnText = document.getElementById('submitBtnText');
+    const poiHints = document.querySelectorAll('.poi-hint');
+    const itineraryHints = document.querySelectorAll('.itinerary-hint');
+    const topKSlider = document.getElementById('topK');
+    
+    if (mode === 'poi') {
+        // 單點推薦模式
+        topKSlider.min = '3';
+        topKSlider.max = '10';
+        topKSlider.value = '5';
+        document.getElementById('topKValue').textContent = '5';
+        
+        timeBudgetGroup.style.display = 'none';
+        llmToggleGroup.style.display = 'block';
+        submitBtnText.textContent = '開始推薦';
+        
+        poiHints.forEach(hint => hint.style.display = 'block');
+        itineraryHints.forEach(hint => hint.style.display = 'none');
+        
+    } else if (mode === 'itinerary') {
+        // 行程推薦模式
+        topKSlider.min = '10';
+        topKSlider.max = '30';
+        topKSlider.value = '20';
+        document.getElementById('topKValue').textContent = '20';
+        
+        timeBudgetGroup.style.display = 'block';
+        llmToggleGroup.style.display = 'none';
+        submitBtnText.textContent = '生成行程';
+        
+        poiHints.forEach(hint => hint.style.display = 'none');
+        itineraryHints.forEach(hint => hint.style.display = 'block');
+    }
+}
+
+// 時間預算滑桿
+function initTimeBudgetSlider() {
+    const slider = document.getElementById('timeBudget');
+    const valueDisplay = document.getElementById('timeBudgetValue');
+    
+    if (slider && valueDisplay) {
+        slider.addEventListener('input', function() {
+            valueDisplay.textContent = this.value;
+        });
+    }
+}
 
 // 類別選擇
 function initCategorySelection() {
@@ -125,30 +192,53 @@ function initForm() {
         const activityIntent = document.getElementById('activityIntent').value.trim();
         
         const topK = parseInt(document.getElementById('topK').value);
-        const enableLLM = document.getElementById('enableLLM').checked;
+        
+        // 獲取選擇的模式
+        const mode = document.querySelector('input[name="recommendMode"]:checked').value;
         
         // 準備請求數據
-        const requestData = {
-            start_location: start,
-            end_location: end,
-            activity_intent: activityIntent,  // 使用活動意圖代替類別
-            top_k: topK,
-            enable_llm: enableLLM
-        };
+        let requestData, apiEndpoint;
         
-        console.log('提交推薦請求:', requestData);
+        if (mode === 'poi') {
+            // 單點推薦
+            const enableLLM = document.getElementById('enableLLM').checked;
+            requestData = {
+                start_location: start,
+                end_location: end,
+                activity_intent: activityIntent,
+                top_k: topK,
+                enable_llm: enableLLM
+            };
+            apiEndpoint = '/api/recommend';
+            
+        } else if (mode === 'itinerary') {
+            // 行程推薦
+            const timeBudget = parseInt(document.getElementById('timeBudget').value);
+            requestData = {
+                start: start,
+                end: end,
+                activity_intent: activityIntent || '旅遊探索',
+                time_budget: timeBudget,
+                top_k: topK,
+                user_id: 'web_user',
+                user_history: []
+            };
+            apiEndpoint = '/api/itinerary';
+        }
+        
+        console.log('提交推薦請求:', { mode, endpoint: apiEndpoint, data: requestData });
         
         // 發送請求
-        await getRecommendations(requestData);
+        await getRecommendations(requestData, apiEndpoint, mode);
     });
 }
 
 // 獲取推薦
-async function getRecommendations(data) {
+async function getRecommendations(data, endpoint, mode) {
     showLoading();
     
     try {
-        const response = await fetch('/api/recommend', {
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -162,7 +252,7 @@ async function getRecommendations(data) {
         }
         
         const result = await response.json();
-        displayResults(result);
+        displayResults(result, mode);
         
     } catch (error) {
         console.error('Error:', error);
@@ -198,7 +288,9 @@ function showError(message) {
 }
 
 // 顯示結果
-function displayResults(data) {
+function displayResults(data, mode) {
+    console.log('顯示結果:', data, 'mode:', mode);
+    
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('errorState').style.display = 'none';
@@ -207,8 +299,20 @@ function displayResults(data) {
     // 恢復提交按鈕
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = false;
-    submitBtn.innerHTML = '<i class="fas fa-search"></i> 開始推薦';
+    const submitBtnText = mode === 'itinerary' ? '生成行程' : '開始推薦';
+    submitBtn.innerHTML = `<i class="fas fa-search"></i><span id="submitBtnText"> ${submitBtnText}</span>`;
     
+    if (mode === 'itinerary' && data.type === 'itinerary') {
+        // 行程推薦模式
+        displayItineraryResult(data);
+    } else {
+        // 單點推薦模式
+        displayPOIResults(data);
+    }
+}
+
+// 顯示單點推薦結果
+function displayPOIResults(data) {
     // 更新統計
     updateStatistics(data);
     
@@ -217,6 +321,138 @@ function displayResults(data) {
     
     // 顯示推薦列表
     displayRecommendations(data.recommendations);
+}
+
+// 顯示行程推薦結果
+function displayItineraryResult(data) {
+    const itinerary = data.itinerary;
+    
+    // 更新統計為行程統計
+    document.getElementById('statTotal').textContent = itinerary.total_stops;
+    document.getElementById('statAvgScore').textContent = `${itinerary.total_duration}分`;
+    document.getElementById('statExtraTime').textContent = `${itinerary.total_distance.toFixed(1)}km`;
+    
+    // 更新統計標籤
+    document.querySelector('.stats-container .stat-card:nth-child(1) .stat-label').textContent = '景點數量';
+    document.querySelector('.stats-container .stat-card:nth-child(2) .stat-label').textContent = '預計時間';
+    document.querySelector('.stats-container .stat-card:nth-child(3) .stat-label').textContent = '總距離';
+    
+    // 初始化地圖（行程模式）
+    initItineraryMap(itinerary);
+    
+    // 顯示行程卡片
+    displayItineraryCard(itinerary);
+}
+
+// 初始化行程地圖
+function initItineraryMap(itinerary) {
+    if (!map) {
+        map = new LeafletResultMap('map');
+    }
+    
+    // 構建行程路線數據
+    const routeData = {
+        start_location: itinerary.route.start,
+        end_location: itinerary.route.end,
+        recommendations: itinerary.stops.map((stop, idx) => ({
+            poi: {
+                name: stop.name,
+                latitude: stop.latitude,
+                longitude: stop.longitude,
+                avg_rating: stop.rating,
+                num_reviews: stop.reviews,
+                primary_category: stop.category
+            },
+            score: 1.0 - (idx * 0.1),
+            extra_time_minutes: stop.duration
+        }))
+    };
+    
+    map.setData(routeData);
+}
+
+// 顯示行程卡片
+function displayItineraryCard(itinerary) {
+    const container = document.getElementById('recommendationsList');
+    container.innerHTML = '';
+    
+    const card = document.createElement('div');
+    card.className = 'itinerary-card';
+    
+    // 構建行程卡片HTML
+    let stopsHTML = '';
+    itinerary.stops.forEach((stop, idx) => {
+        const isLast = idx === itinerary.stops.length - 1;
+        stopsHTML += `
+            <div class="stop-item">
+                <div class="stop-order">${stop.order}</div>
+                <div class="stop-content">
+                    <div class="stop-name">${stop.name}</div>
+                    <div class="stop-details">
+                        <span><i class="fas fa-star"></i> ${stop.rating.toFixed(1)}</span>
+                        <span><i class="fas fa-tag"></i> ${stop.category}</span>
+                        <span><i class="fas fa-clock"></i> ${stop.duration}分鐘</span>
+                        ${stop.reviews ? `<span><i class="fas fa-comment"></i> ${stop.reviews.toLocaleString()}</span>` : ''}
+                    </div>
+                    <div class="stop-reason">${stop.reason}</div>
+                </div>
+            </div>
+            ${!isLast ? '<div style="text-align: center; color: #9ca3af; margin: 8px 0;">↓</div>' : ''}
+        `;
+    });
+    
+    // 構建提示HTML
+    let tipsHTML = '';
+    if (itinerary.tips && itinerary.tips.length > 0) {
+        tipsHTML = `
+            <div class="itinerary-tips">
+                <h4><i class="fas fa-lightbulb"></i> 旅遊建議</h4>
+                <ul>
+                    ${itinerary.tips.map(tip => `<li>${tip}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+    
+    card.innerHTML = `
+        <div class="itinerary-header">
+            <div class="itinerary-icon">🗺️</div>
+            <div>
+                <h3 class="itinerary-title">${itinerary.title || '旅遊行程'}</h3>
+            </div>
+        </div>
+        
+        <div class="itinerary-meta">
+            <div class="meta-item">
+                <i class="fas fa-map-marker-alt"></i>
+                <span>${itinerary.total_stops} 個景點</span>
+            </div>
+            <div class="meta-item">
+                <i class="fas fa-clock"></i>
+                <span>${itinerary.total_duration} 分鐘</span>
+            </div>
+            <div class="meta-item">
+                <i class="fas fa-route"></i>
+                <span>${itinerary.total_distance.toFixed(1)} km</span>
+            </div>
+            ${itinerary.route.optimized ? '<div class="meta-item"><i class="fas fa-check-circle"></i><span style="color: #10b981;">路徑已優化</span></div>' : ''}
+        </div>
+        
+        <div class="itinerary-stops">
+            ${stopsHTML}
+        </div>
+        
+        ${itinerary.summary ? `
+            <div class="itinerary-summary">
+                <h4><i class="fas fa-file-alt"></i> 行程摘要</h4>
+                <p>${itinerary.summary}</p>
+            </div>
+        ` : ''}
+        
+        ${tipsHTML}
+    `;
+    
+    container.appendChild(card);
 }
 
 // 更新統計資訊
