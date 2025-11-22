@@ -586,8 +586,10 @@ def prepare_user_features(
         categories = []
         
         for poi_id in poi_ids:
-            poi_data = poi_processor.poi_index.get(poi_id)
-            if poi_data:
+            # poi_index 儲存的是索引號，需要從 processed_pois 列表獲取資料
+            poi_idx = poi_processor.poi_index.get(poi_id)
+            if poi_idx is not None and poi_idx < len(poi_processor.processed_pois):
+                poi_data = poi_processor.processed_pois[poi_idx]
                 ratings.append(poi_data.get('avg_rating', 3.5))
                 categories.append(poi_data.get('primary_category', ''))
         
