@@ -258,27 +258,41 @@ class RecommenderEvaluator:
         poi_categorical_lists = {'category': [], 'state': [], 'price_level': []}
         
         for poi_id in poi_ids:
-            poi_data = self.poi_processor.poi_index.get(poi_id)
-            if poi_data is None:
+            # poi_index 儲存的是索引號，不是 POI 資料本身
+            poi_idx = self.poi_processor.poi_index.get(poi_id)
+            if poi_idx is None or poi_idx >= len(self.poi_processor.processed_pois):
                 # 使用預設值
                 poi_continuous = torch.zeros(8)
                 poi_categorical_lists['category'].append(0)
                 poi_categorical_lists['state'].append(0)
                 poi_categorical_lists['price_level'].append(2)
             else:
+                # 從 processed_pois 列表中獲取 POI 資料
+                poi_data = self.poi_processor.processed_pois[poi_idx]
+                
                 poi_continuous = torch.tensor([
                     poi_data.get('avg_rating', 3.5),
-                    poi_data.get('review_count', 0),
+                    poi_data.get('num_reviews', 0),  # 修正欄位名稱
                     poi_data.get('price_level', 2),
                     poi_data.get('latitude', 0),
                     poi_data.get('longitude', 0),
-                    poi_data.get('popularity_score', 0),
+                    0,  # popularity_score (如果需要可計算)
                     0,  # 預留特徵
                     0   # distance (評估時未知)
                 ], dtype=torch.float32)
                 
-                poi_categorical_lists['category'].append(poi_data.get('encoded_category', 0))
-                poi_categorical_lists['state'].append(poi_data.get('encoded_state', 0))
+                # 編碼類別特徵
+                category_encoded = self.poi_processor.category_encoder.get(
+                    poi_data.get('primary_category', 'Other'), 
+                    self.poi_processor.category_encoder.get('Other', 0)
+                )
+                state_encoded = self.poi_processor.state_encoder.get(
+                    poi_data.get('state', 'Unknown'),
+                    self.poi_processor.state_encoder.get('Unknown', 0)
+                )
+                
+                poi_categorical_lists['category'].append(category_encoded)
+                poi_categorical_lists['state'].append(state_encoded)
                 poi_categorical_lists['price_level'].append(min(poi_data.get('price_level', 2), 4))
             
             poi_continuous_list.append(poi_continuous)
@@ -428,7 +442,16 @@ def load_model_and_processors(
     # 載入 POI 資料
     poi_processor = POIDataProcessor(poi_data_path)
     poi_processor.load_data()
+    print(f"✓ 載入了 {len(poi_processor.pois)} 個 POI")
+    if len(poi_processor.pois) > 0:
+        sample_poi = poi_processor.pois[0]
+        print(f"  POI 欄位: {list(sample_poi.keys())[:10]}")
+    
     poi_processor.preprocess()
+    print(f"✓ 處理後有 {len(poi_processor.processed_pois)} 個 POI")
+    if len(poi_processor.processed_pois) > 0:
+        sample_processed = poi_processor.processed_pois[0]
+        print(f"  處理後欄位: {list(sample_processed.keys())[:10]}")
     
     # 載入 checkpoint 以獲取模型配置
     checkpoint = torch.load(model_path, map_location=device)
@@ -490,20 +513,34 @@ def prepare_test_data(
         (訓練集, 測試集) - {user_id: [poi_ids]}
     """
     print(f"\n準備測試資料...")
+    print(f"評論資料路徑: {review_data_path}")
     
     review_processor = ReviewDataProcessor(review_data_path)
     review_processor.load_data(max_records=50000)  # 載入部分資料進行評估
+    
+    print(f"✓ 載入了 {len(review_processor.reviews)} 條評論")
+    
+    # 檢查資料格式
+    if len(review_processor.reviews) > 0:
+        sample = review_processor.reviews[0]
+        print(f"  評論欄位: {list(sample.keys())[:10]}")
     
     user_interactions = defaultdict(list)
     
     for review in review_processor.reviews:
         user_id = review.get('user_id')
-        poi_id = review.get('business_id')
-        rating = review.get('stars', 0)
+        # 嘗試不同的 POI ID 鍵名
+        poi_id = review.get('gmap_id') or review.get('business_id')
+        rating = review.get('stars', 0) or review.get('rating', 0)
+        
+        if not user_id or not poi_id:
+            continue
         
         # 只考慮高評分（4-5 星）作為正樣本
         if rating >= 4.0:
             user_interactions[user_id].append(poi_id)
+    
+    print(f"✓ 找到 {len(user_interactions)} 個用戶的互動記錄")
     
     # 分割訓練集和測試集
     train_data = {}
@@ -615,10 +652,15 @@ def main():
     user_features_dict = prepare_user_features(train_data, poi_processor, args.device)
     
     # 獲取所有候選 POI
-    all_candidate_pois = [poi['gmap_id'] for poi in poi_processor.processed_pois 
-                          if 'gmap_id' in poi]
+    # 注意：processed_pois 使用 'id' 欄位（來自原始的 'gmap_id'）
+    all_candidate_pois = [poi['id'] for poi in poi_processor.processed_pois 
+                          if 'id' in poi]
     
     print(f"\n✓ 候選 POI 總數: {len(all_candidate_pois)}")
+    if len(poi_processor.processed_pois) > 0 and len(all_candidate_pois) == 0:
+        print("⚠️  警告：POI 資料中沒有 'id' 欄位！")
+        sample_keys = list(poi_processor.processed_pois[0].keys())
+        print(f"   可用欄位: {sample_keys}")
     
     # 創建評估器
     evaluator = RecommenderEvaluator(model, poi_processor, k_values=args.k_values)
