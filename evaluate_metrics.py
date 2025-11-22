@@ -255,16 +255,16 @@ class RecommenderEvaluator:
         
         # 獲取 POI 特徵
         poi_continuous_list = []
-        poi_categorical_lists = {'poi_id': [], 'primary_category': [], 'state': []}
+        poi_categorical_lists = {'category': [], 'state': [], 'price_level': []}
         
         for poi_id in poi_ids:
             poi_data = self.poi_processor.poi_index.get(poi_id)
             if poi_data is None:
                 # 使用預設值
                 poi_continuous = torch.zeros(8)
-                poi_categorical_lists['poi_id'].append(0)
-                poi_categorical_lists['primary_category'].append(0)
+                poi_categorical_lists['category'].append(0)
                 poi_categorical_lists['state'].append(0)
+                poi_categorical_lists['price_level'].append(2)
             else:
                 poi_continuous = torch.tensor([
                     poi_data.get('avg_rating', 3.5),
@@ -273,21 +273,21 @@ class RecommenderEvaluator:
                     poi_data.get('latitude', 0),
                     poi_data.get('longitude', 0),
                     poi_data.get('popularity_score', 0),
-                    0,  # is_open (預設)
+                    0,  # 預留特徵
                     0   # distance (評估時未知)
                 ], dtype=torch.float32)
                 
-                poi_categorical_lists['poi_id'].append(poi_data.get('encoded_id', 0))
-                poi_categorical_lists['primary_category'].append(poi_data.get('encoded_category', 0))
+                poi_categorical_lists['category'].append(poi_data.get('encoded_category', 0))
                 poi_categorical_lists['state'].append(poi_data.get('encoded_state', 0))
+                poi_categorical_lists['price_level'].append(min(poi_data.get('price_level', 2), 4))
             
             poi_continuous_list.append(poi_continuous)
         
         # 轉換為張量
         batch_features['poi_continuous'] = torch.stack(poi_continuous_list).to(self.device)
         
-        # 組織 POI 類別特徵
-        for key in ['poi_id', 'primary_category', 'state']:
+        # 組織 POI 類別特徵（與訓練時一致）
+        for key in ['category', 'state', 'price_level']:
             batch_features['poi_categorical'][key] = torch.tensor(
                 poi_categorical_lists[key], dtype=torch.long
             ).to(self.device)
@@ -430,18 +430,24 @@ def load_model_and_processors(
     poi_processor.load_data()
     poi_processor.preprocess()
     
-    # 創建模型
-    user_vocab_sizes = {
-        'user_id': 10000,
-    }
+    # 載入 checkpoint 以獲取模型配置
+    checkpoint = torch.load(model_path, map_location=device)
     
-    poi_vocab_sizes = {
-        'poi_id': len(poi_processor.processed_pois),
-        'primary_category': len(poi_processor.category_encoder),
-        'state': len(poi_processor.state_encoder),
-        'price_level': 5,
-        'is_open': 2
-    }
+    # 從 checkpoint 中獲取 vocab_sizes（如果有）
+    if 'poi_vocab_sizes' in checkpoint:
+        poi_vocab_sizes = checkpoint['poi_vocab_sizes']
+        print(f"  從 checkpoint 載入 vocab_sizes: {poi_vocab_sizes}")
+    else:
+        # 使用訓練時的配置（與 train_model.py 一致）
+        poi_vocab_sizes = {
+            'category': len(poi_processor.category_encoder),
+            'state': len(poi_processor.state_encoder),
+            'price_level': 5
+        }
+        print(f"  使用預設 vocab_sizes: {poi_vocab_sizes}")
+    
+    # 創建模型
+    user_vocab_sizes = {}  # 訓練時沒有使用用戶類別特徵
     
     model = create_travel_dlrm(
         user_continuous_dim=10,
@@ -456,7 +462,6 @@ def load_model_and_processors(
     )
     
     # 載入訓練好的權重
-    checkpoint = torch.load(model_path, map_location=device)
     if 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
     else:
@@ -564,10 +569,8 @@ def prepare_user_features(
             0, 0, 0, 0, 0, 0, 0  # 填充到 10 維
         ], dtype=torch.float32)
         
-        # 用戶類別特徵
-        user_categorical = {
-            'user_id': torch.tensor([hash(user_id) % 10000]),
-        }
+        # 用戶類別特徵（訓練時為空字典）
+        user_categorical = {}
         
         user_features_dict[user_id] = {
             'user_continuous': user_continuous,

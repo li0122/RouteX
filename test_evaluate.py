@@ -10,20 +10,16 @@ print("="*60)
 print("測試評估程式 - 模型初始化")
 print("="*60)
 
-# 測試模型創建
-user_vocab_sizes = {
-    'user_id': 10000,
-}
+print("\n1. 創建模型...")
+# 使用與訓練時一致的配置
+user_vocab_sizes = {}  # 訓練時沒有使用用戶類別特徵
 
 poi_vocab_sizes = {
-    'poi_id': 1000,
-    'primary_category': 50,
-    'state': 10,
-    'price_level': 5,
-    'is_open': 2
+    'category': 50,      # 類別數量
+    'state': 10,         # 州數量
+    'price_level': 5     # 價格等級
 }
 
-print("\n1. 創建模型...")
 model = create_travel_dlrm(
     user_continuous_dim=10,
     poi_continuous_dim=8,
@@ -44,15 +40,13 @@ print("\n2. 測試前向傳播...")
 batch_size = 4
 
 user_continuous = torch.randn(batch_size, 10)
-user_categorical = {
-    'user_id': torch.randint(0, 10000, (batch_size,))
-}
+user_categorical = {}  # 訓練時為空字典
 
 poi_continuous = torch.randn(batch_size, 8)
 poi_categorical = {
-    'poi_id': torch.randint(0, 1000, (batch_size,)),
-    'primary_category': torch.randint(0, 50, (batch_size,)),
-    'state': torch.randint(0, 10, (batch_size,))
+    'category': torch.randint(0, 50, (batch_size,)),
+    'state': torch.randint(0, 10, (batch_size,)),
+    'price_level': torch.randint(0, 5, (batch_size,))
 }
 
 path_continuous = torch.randn(batch_size, 4)
