@@ -202,7 +202,7 @@ class RecommenderEvaluator:
                 )
                 
                 # 模型預測
-                scores = self.model(
+                output = self.model(
                     batch_features['user_continuous'],
                     batch_features['user_categorical'],
                     batch_features['poi_continuous'],
@@ -210,6 +210,8 @@ class RecommenderEvaluator:
                     batch_features['path_continuous']
                 )
                 
+                # 提取評分（模型返回字典）
+                scores = output['scores'] if isinstance(output, dict) else output
                 all_scores.extend(scores.cpu().numpy().flatten().tolist())
         
         # 排序並返回 Top-K
@@ -252,16 +254,17 @@ class RecommenderEvaluator:
             batch_features['user_categorical'][key] = val.repeat(batch_size).to(self.device)
         
         # 獲取 POI 特徵
+        poi_continuous_list = []
+        poi_categorical_lists = {'poi_id': [], 'primary_category': [], 'state': []}
+        
         for poi_id in poi_ids:
             poi_data = self.poi_processor.poi_index.get(poi_id)
             if poi_data is None:
                 # 使用預設值
                 poi_continuous = torch.zeros(8)
-                poi_categorical = {
-                    'poi_id': torch.tensor([0]),
-                    'primary_category': torch.tensor([0]),
-                    'state': torch.tensor([0])
-                }
+                poi_categorical_lists['poi_id'].append(0)
+                poi_categorical_lists['primary_category'].append(0)
+                poi_categorical_lists['state'].append(0)
             else:
                 poi_continuous = torch.tensor([
                     poi_data.get('avg_rating', 3.5),
@@ -274,23 +277,20 @@ class RecommenderEvaluator:
                     0   # distance (評估時未知)
                 ], dtype=torch.float32)
                 
-                poi_categorical = {
-                    'poi_id': torch.tensor([self.poi_processor.poi_index.get(poi_id, {}).get('encoded_id', 0)]),
-                    'primary_category': torch.tensor([poi_data.get('encoded_category', 0)]),
-                    'state': torch.tensor([poi_data.get('encoded_state', 0)])
-                }
+                poi_categorical_lists['poi_id'].append(poi_data.get('encoded_id', 0))
+                poi_categorical_lists['primary_category'].append(poi_data.get('encoded_category', 0))
+                poi_categorical_lists['state'].append(poi_data.get('encoded_state', 0))
             
-            batch_features['poi_continuous'].append(poi_continuous)
+            poi_continuous_list.append(poi_continuous)
         
         # 轉換為張量
-        batch_features['poi_continuous'] = torch.stack(batch_features['poi_continuous']).to(self.device)
+        batch_features['poi_continuous'] = torch.stack(poi_continuous_list).to(self.device)
         
         # 組織 POI 類別特徵
         for key in ['poi_id', 'primary_category', 'state']:
-            batch_features['poi_categorical'][key] = torch.cat([
-                batch_features['poi_categorical'].get(key, torch.tensor([0]))
-                for _ in range(batch_size)
-            ]).to(self.device)
+            batch_features['poi_categorical'][key] = torch.tensor(
+                poi_categorical_lists[key], dtype=torch.long
+            ).to(self.device)
         
         return batch_features
     
@@ -431,8 +431,11 @@ def load_model_and_processors(
     poi_processor.preprocess()
     
     # 創建模型
-    vocab_sizes = {
+    user_vocab_sizes = {
         'user_id': 10000,
+    }
+    
+    poi_vocab_sizes = {
         'poi_id': len(poi_processor.processed_pois),
         'primary_category': len(poi_processor.category_encoder),
         'state': len(poi_processor.state_encoder),
@@ -444,7 +447,8 @@ def load_model_and_processors(
         user_continuous_dim=10,
         poi_continuous_dim=8,
         path_continuous_dim=4,
-        vocab_sizes=vocab_sizes,
+        user_vocab_sizes=user_vocab_sizes,
+        poi_vocab_sizes=poi_vocab_sizes,
         embedding_dim=64,
         bottom_mlp_dims=[256, 128],
         top_mlp_dims=[512, 256, 128],
