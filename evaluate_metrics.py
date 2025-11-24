@@ -333,6 +333,13 @@ class RecommenderEvaluator:
             user_id, user_features, all_candidate_pois, top_k=max_k
         )
         
+        # 調試：檢查推薦結果
+        if len(recommended_pois) == 0:
+            print(f"[警告] 用戶 {user_id} 沒有生成任何推薦")
+            return {f'{metric}@{k}': 0.0 
+                   for metric in ['precision', 'recall', 'f1', 'ndcg'] 
+                   for k in self.k_values} | {'auc': 0.0}
+        
         metrics = {}
         
         # 計算各個 K 值的指標
@@ -354,7 +361,7 @@ class RecommenderEvaluator:
             labels.append(1 if poi in test_pois else 0)
             scores.append(score)
         
-        if len(labels) > 0:
+        if len(labels) > 0 and len(set(labels)) > 1:
             metrics['auc'] = self.calculate_auc(np.array(labels), np.array(scores))
         else:
             metrics['auc'] = 0.0
@@ -383,6 +390,7 @@ class RecommenderEvaluator:
         print(f"\n開始評估模型...")
         print(f"評估用戶數: {len(test_data)}")
         print(f"K 值: {self.k_values}")
+        print(f"候選 POI 數量: {len(all_candidate_pois)}")
         
         all_metrics = defaultdict(list)
         
@@ -390,12 +398,19 @@ class RecommenderEvaluator:
         if max_users:
             users = users[:max_users]
         
+        evaluated_count = 0
+        skipped_no_features = 0
+        skipped_no_test = 0
+        error_count = 0
+        
         for user_id in tqdm(users, desc="評估進度"):
             if user_id not in user_features_dict:
+                skipped_no_features += 1
                 continue
             
             test_pois = test_data[user_id]
             if len(test_pois) == 0:
+                skipped_no_test += 1
                 continue
             
             user_features = user_features_dict[user_id]
@@ -407,14 +422,38 @@ class RecommenderEvaluator:
                 
                 for key, val in metrics.items():
                     all_metrics[key].append(val)
+                
+                evaluated_count += 1
+                
+                # 顯示前幾個用戶的詳細結果
+                if evaluated_count <= 3:
+                    print(f"\n[調試] 用戶 {user_id}:")
+                    print(f"  測試 POI 數: {len(test_pois)}")
+                    print(f"  Precision@1: {metrics.get('precision@1', 0):.4f}")
+                    print(f"  Recall@1: {metrics.get('recall@1', 0):.4f}")
+                    print(f"  NDCG@1: {metrics.get('ndcg@1', 0):.4f}")
+                
             except Exception as e:
-                print(f"評估用戶 {user_id} 時出錯: {e}")
+                error_count += 1
+                if error_count <= 3:
+                    print(f"\n評估用戶 {user_id} 時出錯: {e}")
+                    import traceback
+                    traceback.print_exc()
                 continue
+        
+        print(f"\n評估統計:")
+        print(f"  成功評估: {evaluated_count} 個用戶")
+        print(f"  跳過（無特徵）: {skipped_no_features} 個用戶")
+        print(f"  跳過（無測試數據）: {skipped_no_test} 個用戶")
+        print(f"  錯誤: {error_count} 個用戶")
         
         # 計算平均指標
         avg_metrics = {}
         for key, values in all_metrics.items():
-            avg_metrics[key] = np.mean(values)
+            if len(values) > 0:
+                avg_metrics[key] = np.mean(values)
+            else:
+                avg_metrics[key] = 0.0
         
         return avg_metrics
 
