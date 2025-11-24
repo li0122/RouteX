@@ -664,6 +664,46 @@ def main():
         sample_keys = list(poi_processor.processed_pois[0].keys())
         print(f"   可用欄位: {sample_keys}")
     
+    # ================= 插入此段 Debug 程式碼 =================
+    print("\n" + "="*20 + " DEBUG START " + "="*20)
+    
+    # 檢查 1: 候選 POI 是否為空？
+    print(f"候選 POI 數量: {len(all_candidate_pois)}")
+    if len(all_candidate_pois) > 0:
+        print(f"候選 POI 範例 (前3): {all_candidate_pois[:3]}")
+    else:
+        print("❌ 嚴重錯誤: all_candidate_pois 為空！請檢查 poi['id'] 鍵值名稱。")
+
+    # 檢查 2: 測試集 ID 範例
+    test_user_sample = list(test_data.keys())[0]
+    test_poi_sample = test_data[test_user_sample]
+    print(f"測試集 User ID: {test_user_sample}")
+    print(f"測試集 POI ID 範例: {test_poi_sample[:3]}")
+
+    # 檢查 3: ID 是否有交集？
+    candidate_set = set(all_candidate_pois)
+    test_poi_set = set(test_poi_sample)
+    intersection = candidate_set.intersection(test_poi_set)
+    
+    print(f"單一用戶測試集與候選集的交集數量: {len(intersection)}")
+    if len(intersection) == 0:
+        print("❌ 嚴重錯誤: ID 完全對不上！Review 中的 ID 不存在於 POI 列表中。")
+        print("可能原因：")
+        print("1. Review 用的是 'gmap_id' 但 POI 用的是 'business_id'")
+        print("2. 資料處理時 ID 被去除了空白或改變了格式")
+        print("3. poi_processor.processed_pois 裡面的 key 不是 'id' 而是 'gmap_id'")
+    else:
+        print("✅ ID 格式看起來正常，有交集。")
+        
+    # 檢查 4: 處理器索引
+    print(f"Processor Index Size: {len(poi_processor.poi_index)}")
+    sample_lookup_id = test_poi_sample[0]
+    lookup_result = poi_processor.poi_index.get(sample_lookup_id)
+    print(f"嘗試從 poi_index 查找 ID '{sample_lookup_id}': 索引值 = {lookup_result}")
+    
+    print("="*20 + " DEBUG END " + "="*20 + "\n")
+    # =======================================================
+    
     # 創建評估器
     evaluator = RecommenderEvaluator(model, poi_processor, k_values=args.k_values)
     
