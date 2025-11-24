@@ -213,9 +213,9 @@ class RecommenderEvaluator:
                 # 提取評分（模型返回字典）
                 scores = output['scores'] if isinstance(output, dict) else output
                 
-                # 將 logits 轉換為機率（使用 sigmoid）
-                scores = torch.sigmoid(scores)
-                
+                # 重要：用原始 logits 排序，不要 sigmoid
+                # sigmoid 會把極端負值都壓縮到 0，失去區分度
+                # logits 保留了相對大小關係，適合排序
                 all_scores.extend(scores.cpu().numpy().flatten().tolist())
         
         # 排序並返回 Top-K
@@ -441,13 +441,19 @@ class RecommenderEvaluator:
                     )
                     print(f"  推薦 POI 數: {len(rec_pois)}")
                     print(f"  推薦 POI 範例: {rec_pois[:3]}")
-                    print(f"  推薦分數範例: {[f'{s:.4f}' for s in rec_scores[:3]]}")
+                    print(f"  推薦分數範例: {[f'{s:.6f}' for s in rec_scores[:3]]}")  # 顯示更多位數
+                    print(f"  推薦分數範圍: [{min(rec_scores):.6f}, {max(rec_scores):.6f}]")
                     
                     # 檢查是否有交集
                     hits = set(test_pois) & set(rec_pois[:10])
                     print(f"  Top-10 命中數: {len(hits)}")
                     if hits:
                         print(f"  命中的 POI: {list(hits)[:3]}")
+                        # 找出命中 POI 在推薦列表中的位置
+                        for hit_poi in list(hits)[:3]:
+                            pos = rec_pois.index(hit_poi) + 1
+                            score = rec_scores[rec_pois.index(hit_poi)]
+                            print(f"    -> '{hit_poi}' 排名: {pos}, 分數: {score:.6f}")
                     
                     print(f"  Precision@1: {metrics.get('precision@1', 0):.4f}")
                     print(f"  Recall@1: {metrics.get('recall@1', 0):.4f}")
@@ -688,7 +694,7 @@ def main():
                         help='POI 資料路徑')
     parser.add_argument('--review-data', type=str, default='datasets/review-California.json.gz',
                         help='評論資料路徑')
-    parser.add_argument('--k-values', type=int, nargs='+', default=[1, 3, 10],
+    parser.add_argument('--k-values', type=int, nargs='+', default=[10],
                         help='K 值列表')
     parser.add_argument('--max-users', type=int, default=500,
                         help='最多評估的用戶數')
