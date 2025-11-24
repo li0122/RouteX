@@ -429,6 +429,22 @@ class RecommenderEvaluator:
                 if evaluated_count <= 3:
                     print(f"\n[調試] 用戶 {user_id}:")
                     print(f"  測試 POI 數: {len(test_pois)}")
+                    print(f"  測試 POI 範例: {test_pois[:3]}")
+                    
+                    # 獲取推薦結果查看
+                    rec_pois, rec_scores = self.get_user_recommendations(
+                        user_id, user_features, all_candidate_pois, top_k=10
+                    )
+                    print(f"  推薦 POI 數: {len(rec_pois)}")
+                    print(f"  推薦 POI 範例: {rec_pois[:3]}")
+                    print(f"  推薦分數範例: {[f'{s:.4f}' for s in rec_scores[:3]]}")
+                    
+                    # 檢查是否有交集
+                    hits = set(test_pois) & set(rec_pois[:10])
+                    print(f"  Top-10 命中數: {len(hits)}")
+                    if hits:
+                        print(f"  命中的 POI: {list(hits)[:3]}")
+                    
                     print(f"  Precision@1: {metrics.get('precision@1', 0):.4f}")
                     print(f"  Recall@1: {metrics.get('recall@1', 0):.4f}")
                     print(f"  NDCG@1: {metrics.get('ndcg@1', 0):.4f}")
@@ -702,6 +718,40 @@ def main():
         print("⚠️  警告：POI 資料中沒有 'id' 欄位！")
         sample_keys = list(poi_processor.processed_pois[0].keys())
         print(f"   可用欄位: {sample_keys}")
+    
+    # ========== 關鍵檢查：測試集 POI 是否在候選集中 ==========
+    print(f"\n檢查資料一致性...")
+    candidate_set = set(all_candidate_pois)
+    
+    # 收集所有測試集 POI
+    all_test_pois = set()
+    for pois in test_data.values():
+        all_test_pois.update(pois)
+    
+    print(f"  候選 POI 集大小: {len(candidate_set)}")
+    print(f"  測試集 POI 集大小: {len(all_test_pois)}")
+    
+    # 計算交集
+    intersection = candidate_set & all_test_pois
+    print(f"  交集大小: {len(intersection)}")
+    print(f"  覆蓋率: {len(intersection) / len(all_test_pois) * 100:.2f}%")
+    
+    if len(intersection) == 0:
+        print("\n❌ 嚴重錯誤：測試集的 POI 完全不在候選集中！")
+        print("\n可能原因：")
+        print("1. Review 資料和 POI 資料的 ID 格式不一致")
+        print("2. 使用了不同的資料集（如 Review 是 California 但 POI 是 Other）")
+        
+        # 顯示範例對比
+        print(f"\n候選 POI ID 範例: {list(candidate_set)[:3]}")
+        print(f"測試集 POI ID 範例: {list(all_test_pois)[:3]}")
+        
+        print("\n請確認：")
+        print("  --poi-data 和 --review-data 使用相同地區的資料集")
+        return
+    
+    print(f"✓ 資料一致性檢查通過")
+    # ==========================================================
     
     # ================= 插入此段 Debug 程式碼 =================
     print("\n" + "="*20 + " DEBUG START " + "="*20)
