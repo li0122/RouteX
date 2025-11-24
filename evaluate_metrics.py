@@ -212,6 +212,10 @@ class RecommenderEvaluator:
                 
                 # 提取評分（模型返回字典）
                 scores = output['scores'] if isinstance(output, dict) else output
+                
+                # 將 logits 轉換為機率（使用 sigmoid）
+                scores = torch.sigmoid(scores)
+                
                 all_scores.extend(scores.cpu().numpy().flatten().tolist())
         
         # 排序並返回 Top-K
@@ -718,40 +722,6 @@ def main():
         print("⚠️  警告：POI 資料中沒有 'id' 欄位！")
         sample_keys = list(poi_processor.processed_pois[0].keys())
         print(f"   可用欄位: {sample_keys}")
-    
-    # ========== 關鍵檢查：測試集 POI 是否在候選集中 ==========
-    print(f"\n檢查資料一致性...")
-    candidate_set = set(all_candidate_pois)
-    
-    # 收集所有測試集 POI
-    all_test_pois = set()
-    for pois in test_data.values():
-        all_test_pois.update(pois)
-    
-    print(f"  候選 POI 集大小: {len(candidate_set)}")
-    print(f"  測試集 POI 集大小: {len(all_test_pois)}")
-    
-    # 計算交集
-    intersection = candidate_set & all_test_pois
-    print(f"  交集大小: {len(intersection)}")
-    print(f"  覆蓋率: {len(intersection) / len(all_test_pois) * 100:.2f}%")
-    
-    if len(intersection) == 0:
-        print("\n❌ 嚴重錯誤：測試集的 POI 完全不在候選集中！")
-        print("\n可能原因：")
-        print("1. Review 資料和 POI 資料的 ID 格式不一致")
-        print("2. 使用了不同的資料集（如 Review 是 California 但 POI 是 Other）")
-        
-        # 顯示範例對比
-        print(f"\n候選 POI ID 範例: {list(candidate_set)[:3]}")
-        print(f"測試集 POI ID 範例: {list(all_test_pois)[:3]}")
-        
-        print("\n請確認：")
-        print("  --poi-data 和 --review-data 使用相同地區的資料集")
-        return
-    
-    print(f"✓ 資料一致性檢查通過")
-    # ==========================================================
     
     # ================= 插入此段 Debug 程式碼 =================
     print("\n" + "="*20 + " DEBUG START " + "="*20)
