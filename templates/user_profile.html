@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用戶畫像設定 - 旅遊推薦系統</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 20px;
+        }
+        
+        .profile-panel, .results-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .profile-panel h2, .results-panel h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .form-group input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .form-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+        
+        .form-group input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .range-value {
+            display: inline-block;
+            float: right;
+            background: #667eea;
+            color: white;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.9em;
+        }
+        
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            background: white;
+        }
+        
+        .checkbox-group {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            background: #f9f9f9;
+        }
+        
+        .checkbox-item {
+            margin: 8px 0;
+        }
+        
+        .checkbox-item input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        
+        .checkbox-item label {
+            font-weight: normal;
+            cursor: pointer;
+        }
+        
+        .btn-recommend {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn-recommend:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-recommend:active {
+            transform: translateY(0);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 1.2em;
+        }
+        
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        
+        .poi-card {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+        
+        .poi-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .poi-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        
+        .poi-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 10px 0;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .poi-meta span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        
+        .badge-category {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .badge-price {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .rating {
+            color: #ffa000;
+            font-weight: 600;
+        }
+        
+        .score {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        
+        .no-results svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            background: #f0f4f8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ 旅遊推薦系統 - 用戶畫像設定</h1>
+        
+        <div class="main-content">
+            <!-- 左側：用戶畫像設定面板 -->
+            <div class="profile-panel">
+                <h2>📋 個人偏好設定</h2>
+                
+                <form id="profileForm">
+                    <div class="form-group">
+                        <label>
+                            平均評分標準
+                            <span class="range-value" id="avgRatingValue">4.0</span>
+                        </label>
+                        <input type="range" id="avgRating" min="1" max="5" step="0.1" value="4.0">
+                        <small style="color: #999;">你通常給景點打幾顆星？</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            評分變異度
+                            <span class="range-value" id="ratingStdValue">0.5</span>
+                        </label>
+                        <input type="range" id="ratingStd" min="0" max="2" step="0.1" value="0.5">
+                        <small style="color: #999;">評分穩定還是差異大？</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            預算等級
+                            <span class="range-value" id="budgetValue">$$$ (3/5)</span>
+                        </label>
+                        <input type="range" id="budget" min="1" max="5" step="1" value="3">
+                        <small style="color: #999;">$ 便宜 → $$$$$ 高價</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            推薦數量
+                            <span class="range-value" id="topKValue">20</span>
+                        </label>
+                        <input type="range" id="topK" min="5" max="50" step="5" value="20">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="state">地區/州</label>
+                        <select id="state">
+                            <option value="all">🌎 所有地區</option>
+                            {% for state in states %}
+                            <option value="{{ state }}">{{ state }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            價格範圍
+                            <span class="range-value" id="priceRangeValue">$ - $$$$$</span>
+                        </label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="range" id="priceMin" min="0" max="4" step="1" value="0" style="width: 50%;">
+                            <input type="range" id="priceMax" min="0" max="4" step="1" value="4" style="width: 50%;">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>偏好類別（可多選）</label>
+                        <div class="checkbox-group" id="categoriesGroup">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="cat_all" value="all" checked>
+                                <label for="cat_all"><strong>🎯 全部類別</strong></label>
+                            </div>
+                            {% for category in categories[:20] %}
+                            <div class="checkbox-item">
+                                <input type="checkbox" class="category-check" value="{{ category }}">
+                                <label>{{ category }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-recommend">
+                        🔍 生成推薦
+                    </button>
+                </form>
+            </div>
+            
+            <!-- 右側：推薦結果面板 -->
+            <div class="results-panel">
+                <h2>🎯 推薦結果</h2>
+                
+                <div id="statsBar" style="display: none;">
+                    <div class="stats">
+                        <div class="stat-item">
+                            <div class="stat-value" id="statCount">0</div>
+                            <div class="stat-label">推薦景點</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="statAvgRating">0.0</div>
+                            <div class="stat-label">平均評分</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="statCategories">0</div>
+                            <div class="stat-label">類別數</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="resultsContainer">
+                    <div class="no-results">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        <h3>設定你的偏好</h3>
+                        <p>調整左側的參數，然後點擊「生成推薦」按鈕</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 範圍滑桿即時更新
+        const avgRating = document.getElementById('avgRating');
+        const avgRatingValue = document.getElementById('avgRatingValue');
+        avgRating.oninput = () => avgRatingValue.textContent = avgRating.value;
+        
+        const ratingStd = document.getElementById('ratingStd');
+        const ratingStdValue = document.getElementById('ratingStdValue');
+        ratingStd.oninput = () => ratingStdValue.textContent = ratingStd.value;
+        
+        const budget = document.getElementById('budget');
+        const budgetValue = document.getElementById('budgetValue');
+        budget.oninput = () => {
+            const symbols = '$'.repeat(parseInt(budget.value));
+            budgetValue.textContent = `${symbols} (${budget.value}/5)`;
+        };
+        
+        const topK = document.getElementById('topK');
+        const topKValue = document.getElementById('topKValue');
+        topK.oninput = () => topKValue.textContent = topK.value;
+        
+        const priceMin = document.getElementById('priceMin');
+        const priceMax = document.getElementById('priceMax');
+        const priceRangeValue = document.getElementById('priceRangeValue');
+        
+        function updatePriceRange() {
+            const min = parseInt(priceMin.value);
+            const max = parseInt(priceMax.value);
+            priceRangeValue.textContent = `${'$'.repeat(min + 1)} - ${'$'.repeat(max + 1)}`;
+        }
+        priceMin.oninput = updatePriceRange;
+        priceMax.oninput = updatePriceRange;
+        
+        // 全選/取消全選類別
+        const catAll = document.getElementById('cat_all');
+        const categoryChecks = document.querySelectorAll('.category-check');
+        
+        catAll.onchange = () => {
+            categoryChecks.forEach(check => check.checked = false);
+        };
+        
+        categoryChecks.forEach(check => {
+            check.onchange = () => {
+                if (check.checked) catAll.checked = false;
+            };
+        });
+        
+        // 表單提交
+        document.getElementById('profileForm').onsubmit = async (e) => {
+            e.preventDefault();
+            
+            // 收集表單數據
+            const categories = Array.from(categoryChecks)
+                .filter(c => c.checked)
+                .map(c => c.value);
+            
+            if (catAll.checked) {
+                categories.push('all');
+            }
+            
+            const data = {
+                avg_rating: parseFloat(avgRating.value),
+                rating_std: parseFloat(ratingStd.value),
+                num_reviews: 10,
+                budget: parseInt(budget.value),
+                top_k: parseInt(topK.value),
+                state: document.getElementById('state').value,
+                price_range: [parseInt(priceMin.value), parseInt(priceMax.value)],
+                categories: categories
+            };
+            
+            // 顯示載入中
+            const resultsContainer = document.getElementById('resultsContainer');
+            resultsContainer.innerHTML = '<div class="loading">正在生成推薦</div>';
+            document.getElementById('statsBar').style.display = 'none';
+            
+            try {
+                // 發送請求
+                const response = await fetch('/api/recommend', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayResults(result.recommendations);
+                } else {
+                    resultsContainer.innerHTML = `<div class="no-results"><h3>❌ 錯誤</h3><p>${result.error}</p></div>`;
+                }
+            } catch (error) {
+                resultsContainer.innerHTML = `<div class="no-results"><h3>❌ 錯誤</h3><p>${error.message}</p></div>`;
+            }
+        };
+        
+        // 顯示結果
+        function displayResults(recommendations) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            const statsBar = document.getElementById('statsBar');
+            
+            if (recommendations.length === 0) {
+                resultsContainer.innerHTML = '<div class="no-results"><h3>😕 無結果</h3><p>嘗試調整過濾條件</p></div>';
+                statsBar.style.display = 'none';
+                return;
+            }
+            
+            // 更新統計
+            const avgRating = (recommendations.reduce((sum, p) => sum + p.rating, 0) / recommendations.length).toFixed(1);
+            const categories = new Set(recommendations.map(p => p.category)).size;
+            
+            document.getElementById('statCount').textContent = recommendations.length;
+            document.getElementById('statAvgRating').textContent = avgRating;
+            document.getElementById('statCategories').textContent = categories;
+            statsBar.style.display = 'block';
+            
+            // 顯示推薦卡片
+            resultsContainer.innerHTML = recommendations.map((poi, index) => `
+                <div class="poi-card">
+                    <h3>${index + 1}. ${poi.name}</h3>
+                    <div class="poi-meta">
+                        <span class="badge badge-category">${poi.category}</span>
+                        <span class="badge badge-price">${'$'.repeat(poi.price_level || 1)}</span>
+                        <span class="rating">⭐ ${poi.rating.toFixed(1)}</span>
+                        <span>💬 ${poi.num_reviews} 評論</span>
+                        <span>📍 ${poi.state}</span>
+                        <span class="score">分數: ${poi.score.toFixed(2)}</span>
+                    </div>
+                    <p style="color: #666; margin-top: 10px; font-size: 0.9em;">
+                        ${poi.address || '地址未提供'}
+                    </p>
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>

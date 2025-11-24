@@ -93,6 +93,21 @@ def test_leaflet():
     return render_template('test_leaflet.html')
 
 
+@app.route('/profile')
+def user_profile():
+    """用戶畫像設定頁面"""
+    if recommender is None or recommender.poi_processor is None:
+        return "推薦系統尚未初始化", 500
+    
+    # 獲取可用的類別和州
+    categories = sorted(recommender.poi_processor.category_encoder.keys())
+    states = sorted(recommender.poi_processor.state_encoder.keys())
+    
+    return render_template('user_profile.html', 
+                         categories=categories,
+                         states=states)
+
+
 @app.route('/api/recommend', methods=['POST'])
 def recommend():
     """推薦API端點"""
@@ -279,10 +294,241 @@ def format_recommendations(recommendations):
 @app.route('/api/categories', methods=['GET'])
 def get_categories():
     """獲取可用類別列表"""
-    return jsonify({
-        'categories': list(CATEGORY_MAP.keys()),
-        'category_map': CATEGORY_MAP
-    })
+    if recommender and recommender.poi_processor:
+        # 從 POI 處理器獲取實際類別
+        actual_categories = list(recommender.poi_processor.category_encoder.keys())
+        return jsonify({
+            'categories': actual_categories,
+            'category_map': CATEGORY_MAP,
+            'states': list(recommender.poi_processor.state_encoder.keys())
+        })
+    else:
+        return jsonify({
+            'categories': list(CATEGORY_MAP.keys()),
+            'category_map': CATEGORY_MAP
+        })
+
+
+@app.route('/api/recommend_by_profile', methods=['POST'])
+def recommend_by_profile():
+    """
+    基於用戶畫像生成推薦
+    
+    請求格式: {
+        "user_profile": {
+            "avg_rating": 4.0,
+            "rating_std": 0.5,
+            "num_reviews": 10,
+            "budget": 3
+        },
+        "filters": {
+            "categories": ["Restaurant", "Museum"],
+            "state": "California",
+            "price_range": [0, 4]
+        },
+        "top_k": 20
+    }
+    """
+    try:
+        if recommender is None:
+            return jsonify({'error': '推薦系統尚未初始化'}), 500
+        
+        data = request.json
+        user_profile = data.get('user_profile', {})
+        filters = data.get('filters', {})
+        top_k = data.get('top_k', 20)
+        
+        print(f"\n📋 收到用戶畫像推薦請求:")
+        print(f"   用戶畫像: {user_profile}")
+        print(f"   過濾條件: {filters}")
+        print(f"   推薦數量: {top_k}")
+        
+        # 創建用戶特徵
+        import numpy as np
+        user_continuous = torch.tensor([
+            user_profile.get('avg_rating', 4.0),
+            user_profile.get('rating_std', 0.5),
+            user_profile.get('num_reviews', 10),
+            user_profile.get('budget', 3) / 5.0,
+            0, 0, 0, 0, 0, 0
+        ], dtype=torch.float32)
+        
+        user_features = {
+            'user_continuous': user_continuous,
+            'user_categorical': {}
+        }
+        
+        # 應用過濾條件
+        category_filter = filters.get('categories', [])
+        if category_filter and 'all' in category_filter:
+            category_filter = None
+        
+        state_filter = filters.get('state', 'all')
+        if state_filter == 'all':
+            state_filter = None
+        
+        price_range = filters.get('price_range', [0, 4])
+        
+        # 篩選候選 POI
+        candidate_pois = []
+        for poi in recommender.poi_processor.processed_pois:
+            # 類別過濾
+            if category_filter:
+                if poi.get('primary_category') not in category_filter:
+                    continue
+            
+            # 地區過濾
+            if state_filter:
+                if poi.get('state') != state_filter:
+                    continue
+            
+            # 價格過濾
+            price_level = poi.get('price_level', 0)
+            if price_level < price_range[0] or price_level > price_range[1]:
+                continue
+            
+            candidate_pois.append(poi['id'])
+        
+        print(f"   篩選後候選 POI: {len(candidate_pois)}")
+        
+        if len(candidate_pois) == 0:
+            return jsonify({
+                'success': True,
+                'recommendations': [],
+                'count': 0,
+                'message': '沒有符合條件的 POI'
+            })
+        
+        # 批次預測
+        batch_size = 512
+        all_scores = []
+        poi_ids = []
+        
+        with torch.no_grad():
+            for i in range(0, len(candidate_pois), batch_size):
+                batch_poi_ids = candidate_pois[i:i+batch_size]
+                batch_features = prepare_batch_features(
+                    user_features, batch_poi_ids, recommender
+                )
+                
+                # 模型預測
+                output = recommender.model(
+                    batch_features['user_continuous'],
+                    batch_features['user_categorical'],
+                    batch_features['poi_continuous'],
+                    batch_features['poi_categorical'],
+                    batch_features['path_continuous']
+                )
+                
+                scores = output['scores'] if isinstance(output, dict) else output
+                all_scores.extend(scores.cpu().numpy().flatten().tolist())
+                poi_ids.extend(batch_poi_ids)
+        
+        # 排序並返回 Top-K
+        poi_scores = list(zip(poi_ids, all_scores))
+        poi_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        # 構建推薦結果
+        recommendations = []
+        for poi_id, score in poi_scores[:top_k]:
+            poi_idx = recommender.poi_processor.poi_index.get(poi_id)
+            if poi_idx is not None and poi_idx < len(recommender.poi_processor.processed_pois):
+                poi_data = recommender.poi_processor.processed_pois[poi_idx]
+                recommendations.append({
+                    'id': poi_id,
+                    'name': poi_data.get('name', 'Unknown'),
+                    'category': poi_data.get('primary_category', 'Other'),
+                    'rating': poi_data.get('avg_rating', 0),
+                    'num_reviews': poi_data.get('num_reviews', 0),
+                    'price_level': poi_data.get('price_level', 0),
+                    'state': poi_data.get('state', 'Unknown'),
+                    'address': poi_data.get('address', ''),
+                    'latitude': poi_data.get('latitude', 0),
+                    'longitude': poi_data.get('longitude', 0),
+                    'score': float(score)
+                })
+        
+        print(f"✓ 生成推薦: {len(recommendations)} 個")
+        
+        return jsonify({
+            'success': True,
+            'recommendations': recommendations,
+            'count': len(recommendations)
+        })
+    
+    except Exception as e:
+        print(f"❌ 用戶畫像推薦失敗: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+def prepare_batch_features(user_features, poi_ids, recommender):
+    """準備批次特徵用於模型輸入"""
+    batch_size = len(poi_ids)
+    device = recommender.device
+    
+    # 複製用戶特徵到批次大小
+    batch_features = {
+        'user_continuous': user_features['user_continuous'].repeat(batch_size, 1).to(device),
+        'user_categorical': {},
+        'poi_continuous': [],
+        'poi_categorical': {},
+        'path_continuous': torch.zeros(batch_size, 4).to(device)
+    }
+    
+    # 複製用戶類別特徵
+    for key, val in user_features['user_categorical'].items():
+        batch_features['user_categorical'][key] = val.repeat(batch_size).to(device)
+    
+    # 獲取 POI 特徵
+    poi_continuous_list = []
+    poi_categorical_lists = {'category': [], 'state': [], 'price_level': []}
+    
+    for poi_id in poi_ids:
+        poi_idx = recommender.poi_processor.poi_index.get(poi_id)
+        if poi_idx is None or poi_idx >= len(recommender.poi_processor.processed_pois):
+            poi_continuous_list.append(torch.zeros(8))
+            poi_categorical_lists['category'].append(0)
+            poi_categorical_lists['state'].append(0)
+            poi_categorical_lists['price_level'].append(2)
+        else:
+            poi_data = recommender.poi_processor.processed_pois[poi_idx]
+            
+            poi_continuous = torch.tensor([
+                poi_data.get('avg_rating', 3.5),
+                poi_data.get('num_reviews', 0),
+                poi_data.get('price_level', 2),
+                poi_data.get('latitude', 0),
+                poi_data.get('longitude', 0),
+                0, 0, 0
+            ], dtype=torch.float32)
+            
+            category_encoded = recommender.poi_processor.category_encoder.get(
+                poi_data.get('primary_category', 'Other'),
+                recommender.poi_processor.category_encoder.get('Other', 0)
+            )
+            state_encoded = recommender.poi_processor.state_encoder.get(
+                poi_data.get('state', 'Unknown'),
+                recommender.poi_processor.state_encoder.get('Unknown', 0)
+            )
+            
+            poi_continuous_list.append(poi_continuous)
+            poi_categorical_lists['category'].append(category_encoded)
+            poi_categorical_lists['state'].append(state_encoded)
+            poi_categorical_lists['price_level'].append(min(poi_data.get('price_level', 2), 4))
+    
+    # 轉換為張量
+    batch_features['poi_continuous'] = torch.stack(poi_continuous_list).to(device)
+    batch_features['poi_categorical'] = {
+        key: torch.tensor(vals, dtype=torch.long).to(device)
+        for key, vals in poi_categorical_lists.items()
+    }
+    
+    return batch_features
 
 
 @app.route('/api/itinerary', methods=['POST'])
