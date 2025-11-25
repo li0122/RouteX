@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基於深度學習與空間路徑優化的個性化旅遊推薦架構 - A1 Poster</title>
+    <style>
+        /* A1 Size Setup */
+        @page {
+            size: A1 portrait; /* 594mm x 841mm */
+            margin: 0;
+        }
+
+        :root {
+            --primary-color: #003366; /* NYUST Blue-ish */
+            --accent-color: #E87722; /* Orange for highlights */
+            --bg-color: #f4f4f4;
+            --text-color: #333;
+            --box-bg: #ffffff;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
+            background-color: #ccc; /* Background for screen viewing */
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Poster Container */
+        .poster {
+            width: 594mm;
+            height: 841mm;
+            background-color: white;
+            display: flex;
+            flex-direction: column;
+            padding: 15mm;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        /* Header Section */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 5px solid var(--primary-color);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .logo-area {
+            width: 15%;
+            text-align: center;
+            font-weight: bold;
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .title-area {
+            width: 85%;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 56pt;
+            color: var(--primary-color);
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        h2 {
+            font-size: 28pt;
+            color: #555;
+            margin: 10px 0;
+        }
+
+        .authors {
+            font-size: 24pt;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+
+        .advisor {
+            font-size: 20pt;
+            color: #666;
+        }
+
+        /* Main Grid Layout */
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr; /* 3 Columns */
+            gap: 20px;
+            flex-grow: 1;
+        }
+
+        /* Content Box Styling */
+        .box {
+            background: var(--box-bg);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .box-title {
+            background-color: var(--primary-color);
+            color: white;
+            font-size: 24pt;
+            padding: 10px 15px;
+            margin: -15px -15px 15px -15px;
+            border-radius: 8px 8px 0 0;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        p, li {
+            font-size: 16pt;
+            line-height: 1.5;
+            text-align: justify;
+            margin-bottom: 10px;
+        }
+
+        ul {
+            padding-left: 30px;
+        }
+
+        strong {
+            color: var(--primary-color);
+        }
+
+        /* Visual Placeholders */
+        .diagram-placeholder {
+            width: 100%;
+            height: 250px;
+            background-color: #eef;
+            border: 2px dashed var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-color);
+            font-size: 18pt;
+            margin: 15px 0;
+            position: relative;
+        }
+
+        .diagram-placeholder::after {
+            content: "請在此處貼上系統架構圖 / 流程圖";
+        }
+
+        /* Data Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 14pt;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f0f0f0;
+            color: var(--primary-color);
+        }
+
+        /* Big Stats */
+        .stat-grid {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .stat-item {
+            text-align: center;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 10px;
+            width: 30%;
+        }
+        .stat-val {
+            font-size: 36pt;
+            font-weight: bold;
+            color: var(--accent-color);
+            display: block;
+        }
+        .stat-label {
+            font-size: 14pt;
+            color: #666;
+        }
+
+        /* Column Specifics */
+        .col-1, .col-2, .col-3 {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Print Settings */
+        @media print {
+            body {
+                background-color: white;
+            }
+            .poster {
+                box-shadow: none;
+                margin: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="poster">
+        <header>
+            <div class="logo-area">
+                國立雲林科技大學<br>
+                資訊工程系<br>
+                NYUST CSIE
+            </div>
+            <div class="title-area">
+                <h1>基於深度學習與空間路徑優化的<br>個性化旅遊推薦架構</h1>
+                <h2>A Personalized Travel Recommendation Framework Based on Deep Learning and Spatial Path Optimization</h2>
+                <div class="authors">作者：王瓅、林庭楷</div>
+                <div class="advisor">指導教授：王濬哲 博士</div>
+            </div>
+        </header>
+
+        <div class="content">
+            
+            <div class="col-1">
+                <div class="box">
+                    <div class="box-title">01 研究摘要 Abstract</div>
+                    <p>隨著自助旅遊普及，旅客面臨嚴重的「資訊過載」問題。傳統推薦系統往往忽略了地理空間限制與路徑順暢性。本研究提出結合 <strong>DLRM (深度學習推薦模型)</strong> 與 <strong>TSP (旅行推銷員問題)</strong> 優化算法的系統。</p>
+                    <p>我們創新地融合了「用戶畫像」、「POI 屬性」與「路徑繞道成本」，並引入 LLM 進行行程生成。實驗證實本系統能達到 AUC 0.9104 的推薦準確度，並縮短 20-40% 的行程路徑。</p>
+                    <p><strong>關鍵字：</strong> DLRM, TSP, Top-K Recommendation, LLM, Spatial Optimization</p>
+                </div>
+
+                <div class="box">
+                    <div class="box-title">02 研究動機與目的</div>
+                    <ul>
+                        <li><strong>痛點分析：</strong> 傳統推薦只關注「喜歡與否」，忽略「順不順路」。現有解決方案常導致景點間距離過遠，浪費交通成本。</li>
+                        <li><strong>研究目的：</strong>
+                            <ol>
+                                <li>構建深層用戶偏好模型 (Deep Learning)。</li>
+                                <li>整合地理空間約束 (Spatial Constraints)。</li>
+                                <li>實現秒級的動態路徑優化 (Path Optimization)。</li>
+                            </ol>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="box">
+                    <div class="box-title">03 核心技術：DLRM</div>
+                    <p>採用 Facebook 提出的 DLRM 架構並針對旅遊場景改良：</p>
+                    <ul>
+                        <li><strong>稀疏特徵 (Sparse)：</strong> 用戶ID、POI類別 (Embedding處理)。</li>
+                        <li><strong>密集特徵 (Dense)：</strong> 經緯度、價格、繞道成本 (MLP處理)。</li>
+                        <li><strong>特徵交互 (Feature Interaction)：</strong> 顯式捕捉用戶對特定地點的興趣強度。</li>
+                    </ul>
+                    <div class="stat-grid">
+                        <div class="stat-item">
+                            <span class="stat-val">0.9104</span>
+                            <span class="stat-label">Model AUC</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-val">0.99</span>
+                            <span class="stat-label">Recall Rate</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-2">
+                <div class="box" style="flex-grow: 1;">
+                    <div class="box-title">04 系統架構 System Architecture</div>
+                    <p>本系統採用前後端分離設計，核心由三大模組構成：</p>
+                    
+                    <div class="diagram-placeholder" style="height: 350px; background-color: #f8f9fa; border: 2px solid #333;">
+                        <div style="text-align: center; width: 80%;">
+                            <div style="border:2px solid #003366; padding:10px; margin:5px; background:white;">前端介面 (Leaflet.js)</div>
+                            <div style="font-size: 24pt;">⬇</div>
+                            <div style="border:2px dashed #E87722; padding:15px; background:white;">
+                                <strong>後端核心 (Flask / PyTorch)</strong><br>
+                                <span style="font-size:12pt;">1. 數據預處理 (Data Preprocessing)</span><br>
+                                <span style="font-size:12pt;">2. 深度興趣預測 (DLRM Model)</span><br>
+                                <span style="font-size:12pt;">3. 空間路徑優化 (TSP Solver)</span>
+                            </div>
+                            <div style="font-size: 24pt;">⬇</div>
+                            <div style="border:2px solid #003366; padding:10px; margin:5px; background:white;">行程生成 (LLM Llama3-70B)</div>
+                        </div>
+                    </div>
+
+                    <p><strong>技術堆疊：</strong></p>
+                    <table>
+                        <tr>
+                            <th>類別</th>
+                            <th>技術方案</th>
+                        </tr>
+                        <tr>
+                            <td>AI Model</td>
+                            <td>DLRM, Llama3-70B</td>
+                        </tr>
+                        <tr>
+                            <td>Backend</td>
+                            <td>Flask, PyTorch, OSRM</td>
+                        </tr>
+                        <tr>
+                            <td>Algorithm</td>
+                            <td>KD-Tree, 2-opt, Or-opt</td>
+                        </tr>
+                        <tr>
+                            <td>Infra</td>
+                            <td>NVIDIA H100 GPU</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="box">
+                    <div class="box-title">05 路徑優化算法</div>
+                    <p>將旅遊規劃視為 <strong>帶時間窗的定向越野問題 (OPTW)</strong>，採用三階段混合啟發式解法：</p>
+                    <ol>
+                        <li><strong>貪婪最近鄰法 (Greedy)：</strong> 快速生成初始解。</li>
+                        <li><strong>2-opt 局部搜索：</strong> 消除路徑交叉，採用增量計算優化 (O(1) Delta Update)。</li>
+                        <li><strong>Or-opt 優化：</strong> 移動連續子序列，微調訪問順序。</li>
+                    </ol>
+                    <div style="background:#eee; padding:10px; border-radius:5px; font-size:14pt; text-align:center;">
+                        <strong>優化結果：單次計算 < 1秒</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-3">
+                <div class="box">
+                    <div class="box-title">06 實驗結果 Experimental Results</div>
+                    <p>使用 Google Local Dataset (California) 進行評估。</p>
+                    
+                    <strong>1. 推薦準確度 (Accuracy)</strong>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>AUC</td>
+                                <td>0.9104</td>
+                            </tr>
+                            <tr>
+                                <td>Precision</td>
+                                <td>0.9109</td>
+                            </tr>
+                            <tr>
+                                <td>Recall</td>
+                                <td>0.9923</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <strong>2. 路徑效率 (Efficiency)</strong>
+                    <div class="stat-grid">
+                        <div class="stat-item" style="width: 45%;">
+                            <span class="stat-val">40%</span>
+                            <span class="stat-label">路徑距離縮短<br>(vs. 基準算法)</span>
+                        </div>
+                        <div class="stat-item" style="width: 45%;">
+                            <span class="stat-val">5 sec</span>
+                            <span class="stat-label">並發計算耗時<br>(20 POIs)</span>
+                        </div>
+                    </div>
+                    
+                    <p><strong>收斂分析：</strong> 模型在 Epoch 50 左右達到穩定，最終驗證集 AUC 穩定在 0.91 以上。</p>
+                </div>
+
+                <div class="box">
+                    <div class="box-title">07 結論 Conclusion</div>
+                    <p>本研究成功開發了一套整合「高精度推薦」與「空間效率優化」的智能旅遊系統。</p>
+                    <ul>
+                        <li><strong>創新性：</strong> DLRM 引入路徑成本特徵，解決了傳統推薦不順路的問題。</li>
+                        <li><strong>實用性：</strong> 結合 OSRM 與 TSP 算法，產出的行程具有高度的可執行性。</li>
+                        <li><strong>未來展望：</strong> 將進一步引入即時交通路況與多日行程規劃功能。</li>
+                    </ul>
+                </div>
+                
+                <div class="box">
+                    <div class="box-title">系統畫面截圖</div>
+                    <div class="diagram-placeholder" style="height: 200px; font-size: 14pt;">
+                        [APP 介面 / 地圖路徑 截圖]
+                    </div>
+                    <div class="diagram-placeholder" style="height: 200px; font-size: 14pt;">
+                        [LLM 對話 / 行程表 截圖]
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>

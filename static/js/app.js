@@ -2,12 +2,12 @@
 
 // 全域變數
 let map = null;
-let mapPicker = null;  // 改用 Leaflet 地圖選擇器
 let markers = [];
 let selectedCategories = [];
 let routeLine = null;
 let startLocation = null;
 let endLocation = null;
+// mapPicker 改為使用 window.mapPicker
 
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initCategorySelection();
     initTopKSlider();
     initTimeBudgetSlider();
-    initLeafletMapPicker();  // 使用 Leaflet
+    // initLeafletMapPicker();  // 延遲初始化，改到步驟2顯示時
     initForm();
     loadCategories();        // 載入類別列表
 });
@@ -37,6 +37,21 @@ function initStepNavigation() {
         // 切換步驟顯示
         step1Section.style.display = 'none';
         step2Section.style.display = 'block';
+        
+        // 初始化地圖（延遲到此時才初始化，確保容器可見）
+        if (!window.mapPicker) {
+            setTimeout(function() {
+                initLeafletMapPicker();
+            }, 100); // 給一點時間讓容器渲染
+        } else {
+            // 如果地圖已存在，重新調整大小
+            setTimeout(function() {
+                if (window.mapPicker && window.mapPicker.map) {
+                    window.mapPicker.map.invalidateSize();
+                    console.log('🗺️ 地圖大小已重新調整');
+                }
+            }, 100);
+        }
         
         // 顯示畫像摘要提示
         showProfileSummary();
@@ -292,27 +307,60 @@ function updateSelectedCategories() {
 
 // Leaflet 地圖選擇器
 function initLeafletMapPicker() {
-    mapPicker = new LeafletMapPicker('locationPickerMap');
+    // 檢查是否已初始化
+    if (window.mapPicker) {
+        console.log('⚠️ 地圖選擇器已存在，跳過初始化');
+        return;
+    }
+    
+    console.log('🗺️ 開始初始化 Leaflet 地圖選擇器...');
+    
+    // 確保容器存在且可見
+    const container = document.getElementById('locationPickerMap');
+    if (!container) {
+        console.error('❌ 找不到地圖容器 locationPickerMap');
+        return;
+    }
+    
+    if (container.offsetParent === null) {
+        console.error('❌ 地圖容器不可見');
+        return;
+    }
+    
+    window.mapPicker = new LeafletMapPicker('locationPickerMap');
     
     // 設定出發點按鈕
-    document.getElementById('setStartBtn').addEventListener('click', function() {
-        mapPicker.setMode('start');
-        this.style.opacity = '1';
-        this.style.transform = 'scale(1.05)';
-        document.getElementById('setEndBtn').style.opacity = '0.7';
-        document.getElementById('setEndBtn').style.transform = 'scale(1)';
-        showToast('請在地圖上點擊選擇出發點', 'info');
-    });
+    const setStartBtn = document.getElementById('setStartBtn');
+    const setEndBtn = document.getElementById('setEndBtn');
+    
+    if (setStartBtn) {
+        setStartBtn.addEventListener('click', function() {
+            window.mapPicker.setMode('start');
+            this.style.opacity = '1';
+            this.style.transform = 'scale(1.05)';
+            if (setEndBtn) {
+                setEndBtn.style.opacity = '0.7';
+                setEndBtn.style.transform = 'scale(1)';
+            }
+            showToast('請在地圖上點擊選擇出發點', 'info');
+        });
+    }
     
     // 設定目的地按鈕
-    document.getElementById('setEndBtn').addEventListener('click', function() {
-        mapPicker.setMode('end');
-        this.style.opacity = '1';
-        this.style.transform = 'scale(1.05)';
-        document.getElementById('setStartBtn').style.opacity = '0.7';
-        document.getElementById('setStartBtn').style.transform = 'scale(1)';
-        showToast('請在地圖上點擊選擇目的地', 'info');
-    });
+    if (setEndBtn) {
+        setEndBtn.addEventListener('click', function() {
+            window.mapPicker.setMode('end');
+            this.style.opacity = '1';
+            this.style.transform = 'scale(1.05)';
+            if (setStartBtn) {
+                setStartBtn.style.opacity = '0.7';
+                setStartBtn.style.transform = 'scale(1)';
+            }
+            showToast('請在地圖上點擊選擇目的地', 'info');
+        });
+    }
+    
+    console.log('✅ Leaflet 地圖選擇器初始化完成');
 }
 
 // 顯示提示訊息
@@ -387,8 +435,8 @@ function initForm() {
         let requestData, apiEndpoint;
         
         // 從地圖選擇器獲取起終點
-        const start = mapPicker.startLocation;
-        const end = mapPicker.endLocation;
+        const start = window.mapPicker ? window.mapPicker.startLocation : null;
+        const end = window.mapPicker ? window.mapPicker.endLocation : null;
         
         // 驗證地點是否已選擇
         if (!start || !end) {
