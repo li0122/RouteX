@@ -25,152 +25,247 @@
                 </h2>
 
                 <form id="recommendForm">
-                    <!-- 推薦模式選擇 -->
-                    <div class="form-group">
-                        <label>
-                            <i class="fas fa-layer-group"></i> 推薦模式
-                        </label>
-                        <div class="mode-selector">
-                            <label class="mode-option" id="modeOptionPOI">
-                                <input type="radio" name="recommendMode" value="poi" checked>
-                                <div class="mode-card">
-                                    <div class="mode-icon"></div>
-                                    <div class="mode-title">單點推薦</div>
-                                    <div class="mode-desc">多個獨立景點，自由選擇</div>
-                                    <div class="mode-features">
-                                        <span class="feature-tag">快速</span>
-                                        <span class="feature-tag">5-10個景點</span>
-                                    </div>
-                                </div>
-                            </label>
-                            <label class="mode-option" id="modeOptionItinerary">
-                                <input type="radio" name="recommendMode" value="itinerary">
-                                <div class="mode-card">
-                                    <div class="mode-icon">️</div>
-                                    <div class="mode-title">行程推薦</div>
-                                    <div class="mode-desc">完整行程規劃，路徑優化</div>
-                                    <div class="mode-features">
-                                        <span class="feature-tag">智能</span>
-                                        <span class="feature-tag">最短路徑</span>
-                                    </div>
-                                </div>
-                            </label>
+                    <!-- 步驟 1: 用戶畫像設定 -->
+                    <div class="form-section" id="step1Section">
+                        <div class="section-header">
+                            <h3 style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                                <span class="step-badge">步驟 1</span>
+                                <i class="fas fa-user-circle"></i> 建立您的旅遊畫像
+                            </h3>
+                            <p style="margin: 8px 0 0 0; color: #6b7280; font-size: 14px;">
+                                告訴我們您的旅遊偏好，我們將為您提供個性化推薦
+                            </p>
                         </div>
-                    </div>
 
-                    <!-- 活動需求輸入 -->
-                    <div class="form-group">
-                        <label>
-                            <i class="fas fa-bullseye"></i> 您想做什麼？
-                        </label>
-                        <input 
-                            type="text" 
-                            id="activityIntent" 
-                            placeholder="例如：喝咖啡、吃義大利菜、看博物館、買紀念品、欣賞風景..." 
-                            style="width: 100%; padding: 12px 16px; font-size: 15px; border: 2px solid #e5e7eb; border-radius: 8px; box-sizing: border-box;"
-                        >
-                        <small style="color: #6b7280; margin-top: 8px; display: block;">
-                             <strong>提示：</strong>描述得越具體，LLM 審核就越精準。例如：「喝咖啡」、「品嚐海鮮」、「購買藝術品」
-                        </small>
-                        <div style="margin-top: 12px; padding: 12px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;">
-                            <strong style="color: #92400e;"> 嚴格審核模式：</strong>
-                            <p style="color: #92400e; margin: 4px 0 0 0; font-size: 14px;">LLM 會嚴格檢查每個地點是否符合您的需求，只推薦最相關的地方</p>
+                        <!-- 評分習慣 -->
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-star"></i> 評分習慣: <span id="avgRatingValue">4.0</span> ⭐
+                            </label>
+                            <input type="range" id="avgRating" class="form-control" 
+                                   min="1" max="5" step="0.1" value="4.0">
+                            <small style="color: #6b7280;">您通常給景點的評分標準</small>
                         </div>
-                    </div>
 
-                    <!-- 地點選擇地圖 -->
-                    <div class="form-group">
-                        <label>
-                            <i class="fas fa-map-marked-alt"></i> 在地圖上選擇地點 (舊金山灣區)
-                        </label>
-                        <div id="locationPickerMap" style="margin-bottom: 15px;"></div>
-                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                            <button type="button" id="setStartBtn" class="location-btn" style="flex: 1; background: #10b981;">
-                                <i class="fas fa-map-marker-alt"></i> 設定出發點
-                            </button>
-                            <button type="button" id="setEndBtn" class="location-btn" style="flex: 1; background: #ef4444;">
-                                <i class="fas fa-flag-checkered"></i> 設定目的地
-                            </button>
+                        <!-- 評分寬容度 -->
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-chart-line"></i> 評分寬容度: <span id="ratingStdValue">0.5</span>
+                            </label>
+                            <input type="range" id="ratingStd" class="form-control" 
+                                   min="0.1" max="2.0" step="0.1" value="0.5">
+                            <small style="color: #6b7280;">評分變異度（越高越寬容）</small>
                         </div>
-                        <div class="location-display">
-                            <div class="location-item">
-                                <strong> 出發點:</strong> 
-                                <span id="startLocationDisplay">請在地圖上點擊選擇</span>
-                            </div>
-                            <div class="location-item">
-                                <strong> 目的地:</strong> 
-                                <span id="endLocationDisplay">請在地圖上點擊選擇</span>
+
+                        <!-- 活躍度 -->
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-comments"></i> 評論數量: <span id="numReviewsValue">30</span>
+                            </label>
+                            <input type="range" id="numReviews" class="form-control" 
+                                   min="1" max="100" step="1" value="30">
+                            <small style="color: #6b7280;">您的評論活躍度</small>
+                        </div>
+
+                        <!-- 預算等級 -->
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-wallet"></i> 預算等級: <span id="budgetValue">3</span> / 5
+                            </label>
+                            <input type="range" id="budget" class="form-control" 
+                                   min="1" max="5" step="1" value="3">
+                            <small style="color: #6b7280;">1=節省 | 3=中等 | 5=奢華</small>
+                        </div>
+
+                        <!-- 類別偏好 -->
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-tags"></i> 類別偏好（可多選）
+                            </label>
+                            <div id="categoryCheckboxes" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 8px;">
+                                <!-- 動態載入 -->
                             </div>
                         </div>
-                        <small style="color: #6b7280; margin-top: 10px; display: block;">
-                             <strong>操作提示：</strong><br>
-                             滾輪縮放 |  拖動平移 | ️ 點擊選擇 |  快速地標：金門大橋、漁人碼頭等<br>
-                            自動顯示距離 | 懸停顯示座標
-                        </small>
-                        <input type="hidden" id="startLocation" required>
-                        <input type="hidden" id="endLocation" required>
+
+                        <!-- 地區篩選 -->
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-map-marker-alt"></i> 偏好地區
+                            </label>
+                            <select id="stateFilter" class="form-control" style="padding: 10px; border-radius: 8px; border: 2px solid #e5e7eb;">
+                                <option value="all">全部地區</option>
+                                <!-- 動態載入 -->
+                            </select>
+                        </div>
+
+                        <!-- 價格範圍 -->
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-dollar-sign"></i> 價格範圍: 
+                                <span id="priceRangeDisplay">$-$$$$$</span>
+                            </label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <span style="font-size: 12px; color: #6b7280;">$</span>
+                                <input type="range" id="priceMin" class="form-control" 
+                                       min="0" max="4" step="1" value="0" style="flex: 1;">
+                                <span style="font-size: 12px; color: #6b7280;">~</span>
+                                <input type="range" id="priceMax" class="form-control" 
+                                       min="0" max="4" step="1" value="4" style="flex: 1;">
+                                <span style="font-size: 12px; color: #6b7280;">$$$$$</span>
+                            </div>
+                        </div>
+
+                        <!-- 下一步按鈕 -->
+                        <button type="button" id="nextStepBtn" class="btn btn-primary" style="width: 100%; margin-top: 20px;">
+                            <i class="fas fa-arrow-right"></i> 下一步：選擇推薦模式
+                        </button>
                     </div>
 
-                    <!-- 推薦數量 -->
-                    <div class="form-group" id="topKGroup">
-                        <label for="topK">
-                            <i class="fas fa-list-ol"></i> 推薦數量: <span id="topKValue">5</span>
-                        </label>
-                        <input 
-                            type="range" 
-                            id="topK" 
-                            class="form-control" 
-                            min="3" 
-                            max="10" 
-                            value="5"
-                            style="cursor: pointer;"
-                        >
-                        <small class="mode-hint poi-hint" style="color: #6b7280; margin-top: 8px; display: block;">
-                            返回多個獨立景點卡片
-                        </small>
-                        <small class="mode-hint itinerary-hint" style="color: #6b7280; margin-top: 8px; display: none;">
-                            此為DLRM候選數量，最終行程包含3-5個景點
-                        </small>
-                    </div>
+                    <!-- 步驟 2: 推薦模式選擇 -->
+                    <div class="form-section" id="step2Section" style="display: none;">
+                        <div class="section-header">
+                            <h3 style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                                <span class="step-badge">步驟 2</span>
+                                <i class="fas fa-route"></i> 選擇推薦模式
+                            </h3>
+                            <button type="button" id="backToStep1Btn" class="btn-link" style="margin-top: 8px;">
+                                <i class="fas fa-arrow-left"></i> 返回修改畫像
+                            </button>
+                        </div>
 
-                    <!-- 時間預算（僅行程推薦） -->
-                    <div class="form-group" id="timeBudgetGroup" style="display: none;">
-                        <label for="timeBudget">
-                            <i class="fas fa-clock"></i> 時間預算: <span id="timeBudgetValue">240</span> 分鐘
-                        </label>
-                        <input 
-                            type="range" 
-                            id="timeBudget" 
-                            class="form-control" 
-                            min="60" 
-                            max="480" 
-                            step="30"
-                            value="240"
-                            style="cursor: pointer;"
-                        >
-                        <small style="color: #6b7280; margin-top: 8px; display: block;">
-                            AI會根據時間預算智能選擇景點數量
-                        </small>
-                    </div>
+                        <!-- 推薦模式選擇 -->
+                        <div class="form-group">
+                            <div class="mode-selector" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 16px;">
+                                <label class="mode-option" id="modeOptionPOI">
+                                    <input type="radio" name="recommendMode" value="poi" checked>
+                                    <div class="mode-card">
+                                        <div class="mode-icon">🗺️</div>
+                                        <div class="mode-title">路線推薦</div>
+                                        <div class="mode-desc">基於路徑的沿途景點推薦</div>
+                                        <div class="mode-features">
+                                            <span class="feature-tag">需要起終點</span>
+                                            <span class="feature-tag">LLM審核</span>
+                                        </div>
+                                    </div>
+                                </label>
+                                <label class="mode-option" id="modeOptionItinerary">
+                                    <input type="radio" name="recommendMode" value="itinerary">
+                                    <div class="mode-card">
+                                        <div class="mode-icon">🗓️</div>
+                                        <div class="mode-title">行程規劃</div>
+                                        <div class="mode-desc">完整行程，路徑優化</div>
+                                        <div class="mode-features">
+                                            <span class="feature-tag">需要起終點</span>
+                                            <span class="feature-tag">智能排序</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
 
-                    <!-- LLM過濾開關（僅單點推薦顯示） -->
-                    <div class="settings-toggle" id="llmToggleGroup">
-                        <label class="toggle-switch">
-                            <span>
-                                <i class="fas fa-robot"></i> 啟用AI智能過濾
-                            </span>
-                            <input type="checkbox" id="enableLLM" checked>
-                        </label>
-                        <small style="color: #6b7280; margin-top: 8px; display: block;">
-                            過濾不適合旅客的地點（如倉儲、維修店等）
-                        </small>
-                    </div>
+                        <!-- 活動意圖 -->
+                        <div class="form-group" id="activityIntentGroup">
+                            <label>
+                                <i class="fas fa-bullseye"></i> 本次活動意圖
+                            </label>
+                            <input 
+                                type="text" 
+                                id="activityIntent" 
+                                placeholder="例如：喝咖啡、吃義大利菜、看博物館、買紀念品..." 
+                                style="width: 100%; padding: 12px 16px; font-size: 15px; border: 2px solid #e5e7eb; border-radius: 8px; box-sizing: border-box;"
+                            >
+                            <small style="color: #6b7280; margin-top: 8px; display: block;">
+                                💡 描述越具體，LLM 審核越精準
+                            </small>
+                        </div>
 
-                    <!-- 提交按鈕 -->
-                    <button type="submit" class="btn btn-primary" id="submitBtn">
-                        <i class="fas fa-search"></i>
-                        <span id="submitBtnText">開始推薦</span>
-                    </button>
+                        <!-- 地點選擇地圖 -->
+                        <div class="form-group" id="locationPickerGroup">
+                            <label>
+                                <i class="fas fa-map-marked-alt"></i> 在地圖上選擇路徑
+                            </label>
+                            <div id="locationPickerMap" style="margin-bottom: 15px;"></div>
+                            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                                <button type="button" id="setStartBtn" class="location-btn" style="flex: 1; background: #10b981;">
+                                    <i class="fas fa-map-marker-alt"></i> 設定出發點
+                                </button>
+                                <button type="button" id="setEndBtn" class="location-btn" style="flex: 1; background: #ef4444;">
+                                    <i class="fas fa-flag-checkered"></i> 設定目的地
+                                </button>
+                            </div>
+                            <div class="location-display">
+                                <div class="location-item">
+                                    <strong>🟢 出發點:</strong> 
+                                    <span id="startLocationDisplay">請在地圖上點擊選擇</span>
+                                </div>
+                                <div class="location-item">
+                                    <strong>🔴 目的地:</strong> 
+                                    <span id="endLocationDisplay">請在地圖上點擊選擇</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 推薦數量 -->
+                        <div class="form-group" id="topKGroup">
+                            <label for="topK">
+                                <i class="fas fa-list-ol"></i> 推薦數量: <span id="topKValue">5</span>
+                            </label>
+                            <input 
+                                type="range" 
+                                id="topK" 
+                                class="form-control" 
+                                min="3" 
+                                max="30" 
+                                value="5"
+                                style="cursor: pointer;"
+                            >
+                            <small class="mode-hint poi-hint" style="color: #6b7280; margin-top: 8px; display: block;">
+                                返回多個獨立景點卡片
+                            </small>
+                            <small class="mode-hint itinerary-hint" style="color: #6b7280; margin-top: 8px; display: none;">
+                                此為DLRM候選數量，最終行程包含3-5個景點
+                            </small>
+                        </div>
+
+                        <!-- 時間預算（僅行程推薦） -->
+                        <div class="form-group" id="timeBudgetGroup" style="display: none;">
+                            <label for="timeBudget">
+                                <i class="fas fa-clock"></i> 時間預算: <span id="timeBudgetValue">240</span> 分鐘
+                            </label>
+                            <input 
+                                type="range" 
+                                id="timeBudget" 
+                                class="form-control" 
+                                min="60" 
+                                max="480" 
+                                step="30"
+                                value="240"
+                                style="cursor: pointer;"
+                            >
+                            <small style="color: #6b7280; margin-top: 8px; display: block;">
+                                AI會根據時間預算智能選擇景點數量
+                            </small>
+                        </div>
+
+                        <!-- LLM過濾開關 -->
+                        <div class="settings-toggle" id="llmToggleGroup">
+                            <label class="toggle-switch">
+                                <span>
+                                    <i class="fas fa-robot"></i> 啟用AI智能過濾
+                                </span>
+                                <input type="checkbox" id="enableLLM" checked>
+                            </label>
+                            <small style="color: #6b7280; margin-top: 8px; display: block;">
+                                過濾不適合的地點（倉儲、維修店等）
+                            </small>
+                        </div>
+
+                        <!-- 提交按鈕 -->
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <i class="fas fa-magic"></i>
+                            <span id="submitBtnText">生成個性化推薦</span>
+                        </button>
+                    </div>
                 </form>
             </div>
 
